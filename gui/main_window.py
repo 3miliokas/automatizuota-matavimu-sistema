@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         self.graph_widget.setLabel('left', 'Įtampa', units='V')
         self.graph_widget.setLabel('bottom', 'Laikas', units='s')
         self.graph_widget.showGrid(x=True, y=True)
-        self.graph_widget.setYRange(-5, 5) 
+        #self.graph_widget.setYRange(-5, 5) 
         
         main_layout.addLayout(control_layout, 1)
         main_layout.addWidget(self.graph_widget, 4)
@@ -88,6 +88,9 @@ class MainWindow(QMainWindow):
         # Naudojame vartotojo įvestus parametrus
         amp = self.amplitude_input.value()
         freq = self.frequency_input.value()
+
+        # Dinaminis mastelis su 20% atsarga
+        self.graph_widget.setYRange(-amp * 1.2, amp * 1.2)
         
         y = amp * np.sin(2 * np.pi * freq * self.time_counter) + np.random.normal(0, 0.1)
         self.y_data.append(y)
