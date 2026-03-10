@@ -1,6 +1,7 @@
 import pyqtgraph as pg
 import numpy as np
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QDoubleSpinBox, QFormLayout
+import pyvisa
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QDoubleSpinBox, QFormLayout, QComboBox, QMessageBox
 from PyQt6.QtCore import QTimer
 
 class MainWindow(QMainWindow):
@@ -33,28 +34,41 @@ class MainWindow(QMainWindow):
         settings_layout.addRow("Amplitudė:", self.amplitude_input)
         settings_layout.addRow("Dažnis:", self.frequency_input)
         
-        # Mygtukai
-        self.btn_connect = QPushButton("1. Prijungti prietaisus")
+        # Prietaisų paieška
+        self.device_combo = QComboBox()
+        self.device_combo.addItem("Neprijungta / Nėra prietaisų")
+        
+        self.btn_scan = QPushButton("1. Ieškoti prietaisų (Scan)")
+        self.btn_scan.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
+        
         self.btn_start = QPushButton("2. Pradėti matavimą")
         self.btn_stop = QPushButton("3. Stabdyti")
         
         self.btn_start.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.btn_stop.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
         
-        control_layout.addWidget(QLabel("<b>Sistemos parametrai:</b>"))
+        control_layout.addWidget(QLabel("<b>Aparatūra:</b>"))
+        control_layout.addWidget(self.btn_scan)
+        control_layout.addWidget(self.device_combo)
+        
+        control_layout.addWidget(QLabel("<br><b>Sistemos parametrai:</b>"))
         control_layout.addLayout(settings_layout)
-        control_layout.addWidget(QLabel("<b>Valdymas:</b>"))
-        control_layout.addWidget(self.btn_connect)
+        
+        control_layout.addWidget(QLabel("<br><b>Valdymas:</b>"))
         control_layout.addWidget(self.btn_start)
         control_layout.addWidget(self.btn_stop)
         control_layout.addStretch()
+        
+        # Mygtukų signalai
+        self.btn_scan.clicked.connect(self.scan_devices)
+        self.btn_start.clicked.connect(self.start_measurement)
+        self.btn_stop.clicked.connect(self.stop_measurement)
 
         # --- DEŠINĖ PUSĖ: Grafikas ---
         self.graph_widget = pg.PlotWidget(title="Oscilograma (Realaus laiko simuliacija)")
         self.graph_widget.setLabel('left', 'Įtampa', units='V')
         self.graph_widget.setLabel('bottom', 'Laikas', units='s')
         self.graph_widget.showGrid(x=True, y=True)
-        #self.graph_widget.setYRange(-5, 5) 
         
         main_layout.addLayout(control_layout, 1)
         main_layout.addWidget(self.graph_widget, 4)
@@ -66,9 +80,6 @@ class MainWindow(QMainWindow):
         
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_plot_data)
-        
-        self.btn_start.clicked.connect(self.start_measurement)
-        self.btn_stop.clicked.connect(self.stop_measurement)
         
         self.time_counter = 0
 
@@ -85,11 +96,9 @@ class MainWindow(QMainWindow):
         self.time_counter += 0.05
         self.x_data.append(self.time_counter)
         
-        # Naudojame vartotojo įvestus parametrus
         amp = self.amplitude_input.value()
         freq = self.frequency_input.value()
 
-        # Dinaminis mastelis su 20% atsarga
         self.graph_widget.setYRange(-amp * 1.2, amp * 1.2)
         
         y = amp * np.sin(2 * np.pi * freq * self.time_counter) + np.random.normal(0, 0.1)
@@ -100,3 +109,19 @@ class MainWindow(QMainWindow):
             self.y_data = self.y_data[1:]
             
         self.data_line.setData(self.x_data, self.y_data)
+
+    def scan_devices(self):
+        self.device_combo.clear()
+        try:
+            rm = pyvisa.ResourceManager()
+            instruments = rm.list_resources()
+            
+            if instruments:
+                self.device_combo.addItems(instruments)
+            else:
+                self.device_combo.addItem("Prietaisų nerasta")
+                QMessageBox.information(self, "Paieška", "Prietaisų nerasta. Patikrinkite laidus.")
+                
+        except Exception as e:
+            self.device_combo.addItem("Klaida: VISA neįdiegta")
+            QMessageBox.warning(self, "Klaida", f"Nepavyko inicijuoti PyVISA:\n{e}\n\nAr įdiegtas NI-VISA backend'as?")
