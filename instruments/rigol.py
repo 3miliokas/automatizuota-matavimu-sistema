@@ -24,7 +24,6 @@ class RigolMSO:
         self.inst.write(f":CHANnel{channel}:SCALe {scale}")
 
     def get_measure(self, item, channel=1):
-        """Palaikomi item: VPP, VMAX, VMIN, VAMP, FREQ, PER, RIS, FALL"""
         try:
             val = self.inst.query(f":MEASure:ITEM? {item},CHANnel{channel}")
             return float(val)
@@ -32,7 +31,6 @@ class RigolMSO:
             return 0.0
 
     def get_waveform_data(self, channel=1):
-        """Nuskaito ekrano buferį (iki 1200 taškų) ir konvertuoja į realią įtampą."""
         self.inst.write(f":WAVeform:SOURce CHANnel{channel}")
         self.inst.write(":WAVeform:MODE NORMal")
         self.inst.write(":WAVeform:FORMat BYTE")
@@ -44,15 +42,28 @@ class RigolMSO:
         yorig = int(preamble[8])
         yref = int(preamble[9])
         
-        # Rigol siunčia TMC antraštę (#800000000), header_fmt='ieee' ją apdoroja
         rawdata = self.inst.query_binary_values(":WAVeform:DATA?", datatype='B', header_fmt='ieee', expect_termination=False)
         data = np.array(rawdata)
         
-        # Konversija pagal Rigol Programming Guide algoritmą
         volts = (data - yorig - yref) * yinc
         time = np.arange(len(volts)) * xinc + xorig
         
         return time.tolist(), volts.tolist()
+
+    def get_screenshot(self):
+        """Parsiunčia ekrano nuotrauką iš oscilografo PNG formatu."""
+        self.inst.timeout = 5000 
+        self.inst.write(":DISPlay:DATA? ON,OFF,PNG")
+        raw_data = self.inst.read_raw()
+        
+        # TMC antraštės šalinimas (formatas: #NXXXXXX)
+        if raw_data.startswith(b'#'):
+            header_len_char = raw_data[1:2].decode()
+            if header_len_char.isdigit():
+                header_len = int(header_len_char)
+                image_data = raw_data[2 + header_len:]
+                return image_data
+        return raw_data
 
     def close(self):
         self.inst.close()

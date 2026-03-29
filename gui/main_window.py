@@ -9,6 +9,9 @@ from PyQt6.QtCore import QTimer
 
 from instruments.siglent import SiglentSDG
 from instruments.rigol import RigolMSO
+import serial.tools.list_ports
+from instruments.tti import TTi1604
+from instruments.escort import Escort3136A
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -26,12 +29,17 @@ class MainWindow(QMainWindow):
         # 1. Ryšio skydelis
         conn_group = QGroupBox("Aparatūros Ryšys")
         conn_layout = QFormLayout()
-        self.btn_scan = QPushButton("Skenuoti VISA")
+        self.btn_scan = QPushButton("Skenuoti VISA ir COM")
         self.combo_gen = QComboBox()
         self.combo_osc = QComboBox()
+        self.combo_tti = QComboBox()
+        self.combo_escort = QComboBox()
+        
         conn_layout.addRow(self.btn_scan)
         conn_layout.addRow("Generatorius:", self.combo_gen)
         conn_layout.addRow("Oscilografas:", self.combo_osc)
+        conn_layout.addRow("TTi 1604 (COM):", self.combo_tti)
+        conn_layout.addRow("Escort 3136A (COM):", self.combo_escort)
         conn_group.setLayout(conn_layout)
 
         # 2. Skirtukai (Tabs) prietaisų valdymui
@@ -79,9 +87,13 @@ class MainWindow(QMainWindow):
         self.btn_auto = QPushButton("Auto-Scale")
         self.btn_run = QPushButton("Run")
         self.btn_stop_osc = QPushButton("Stop")
+        self.btn_screenshot = QPushButton("Išsaugoti nuotrauką")
+        self.btn_screenshot.setStyleSheet("background-color: #673AB7; color: white; font-weight: bold;")
+        
         ctrl_layout.addWidget(self.btn_auto)
         ctrl_layout.addWidget(self.btn_run)
         ctrl_layout.addWidget(self.btn_stop_osc)
+        ctrl_layout.addWidget(self.btn_screenshot)
         
         meas_group = QGroupBox("Aparatūriniai matavimai (iš Rigol)")
         meas_grid = QGridLayout()
@@ -112,8 +124,38 @@ class MainWindow(QMainWindow):
         osc_layout.addWidget(meas_group)
         osc_layout.addStretch()
 
+        # --- TAB 3: TTi 1604 Multimetras ---
+        tti_tab = QWidget()
+        tti_layout = QVBoxLayout(tti_tab)
+        
+        self.btn_tti_v = QPushButton("Matuoti Įtampą (V)")
+        self.btn_tti_a = QPushButton("Matuoti Srovę (A)")
+        self.lbl_tti_res = QLabel("Reikšmė: -")
+        self.lbl_tti_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
+        
+        tti_layout.addWidget(self.btn_tti_v)
+        tti_layout.addWidget(self.btn_tti_a)
+        tti_layout.addWidget(self.lbl_tti_res)
+        tti_layout.addStretch()
+        
+        # --- TAB 4: Escort 3136A Multimetras ---
+        escort_tab = QWidget()
+        escort_layout = QVBoxLayout(escort_tab)
+        
+        self.btn_escort_v = QPushButton("Matuoti Įtampą (V)")
+        self.btn_escort_a = QPushButton("Matuoti Srovę (A)")
+        self.lbl_escort_res = QLabel("Reikšmė: -")
+        self.lbl_escort_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #FF9800;")
+        
+        escort_layout.addWidget(self.btn_escort_v)
+        escort_layout.addWidget(self.btn_escort_a)
+        escort_layout.addWidget(self.lbl_escort_res)
+        escort_layout.addStretch()
+
         tabs.addTab(gen_tab, "Generatorius (SDG)")
         tabs.addTab(osc_tab, "Oscilografas (MSO)")
+        tabs.addTab(tti_tab, "Multimetras 1 (TTi)")
+        tabs.addTab(escort_tab, "Multimetras 2 (Escort)")
 
         # 3. Bendras valdymas
         self.btn_start_stream = QPushButton("Pradėti gyvą rodymą")
@@ -122,10 +164,9 @@ class MainWindow(QMainWindow):
         self.btn_start_stream.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.btn_stop_stream.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
 
-        # PADIDINTAS ŽURNALAS
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setMinimumHeight(250) # Pakeista iš maximum 100 į minimum 250
+        self.log_console.setMinimumHeight(200)
         self.log_console.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: Consolas;")
 
         left_panel.addWidget(conn_group)
@@ -158,16 +199,21 @@ class MainWindow(QMainWindow):
         self.btn_run.clicked.connect(lambda: self.control_osc("run"))
         self.btn_stop_osc.clicked.connect(lambda: self.control_osc("stop"))
         self.btn_meas_all.clicked.connect(self.fetch_all_measurements)
+        self.btn_screenshot.clicked.connect(self.save_rigol_screenshot)
         self.btn_start_stream.clicked.connect(self.start_stream)
         self.btn_stop_stream.clicked.connect(self.stop_stream)
         self.btn_export.clicked.connect(self.export_csv)
+        self.btn_tti_v.clicked.connect(lambda: self.fetch_tti("V"))
+        self.btn_tti_a.clicked.connect(lambda: self.fetch_tti("A"))
+        self.btn_escort_v.clicked.connect(lambda: self.fetch_escort("V"))
+        self.btn_escort_a.clicked.connect(lambda: self.fetch_escort("A"))
 
     # --- FUNKCIJOS ---
 
     def log_msg(self, text):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_console.append(f"[{timestamp}] {text}")
-        self.log_console.verticalScrollBar().setValue(self.log_console.verticalScrollBar().maximum()) # Automatinis slinkimas žemyn
+        self.log_console.verticalScrollBar().setValue(self.log_console.verticalScrollBar().maximum())
 
     def format_eng(self, val, unit="V"):
         if val is None or val > 1e15: return "N/A" 
@@ -184,8 +230,10 @@ class MainWindow(QMainWindow):
         return f"{val:.2e} {unit}"
 
     def scan_devices(self):
-        self.combo_gen.clear(); self.combo_osc.clear()
-        self.log_msg("Skenuojama...")
+        self.combo_gen.clear(); self.combo_osc.clear(); self.combo_tti.clear(); self.combo_escort.clear()
+        self.log_msg("Skenuojama VISA ir COM prievadai...")
+        
+        # VISA skenavimas
         rm = pyvisa.ResourceManager()
         for addr in rm.list_resources():
             try:
@@ -201,6 +249,14 @@ class MainWindow(QMainWindow):
                     self.combo_osc.addItem(f"{name} [{addr}]", addr)
             except Exception:
                 pass
+                
+        # COM skenavimas
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            port_info = f"{port.device} - {port.description}"
+            self.combo_tti.addItem(port_info, port.device)
+            self.combo_escort.addItem(port_info, port.device)
+            
         self.log_msg("Skenavimas baigtas.")
 
     def get_freq_hz(self):
@@ -243,7 +299,6 @@ class MainWindow(QMainWindow):
         addr = self.combo_osc.currentData()
         if not addr: return
         
-        # SPRENDIMAS KLAIDAI: Sustabdome fone veikiantį grafiką, kad "neuždusintume" Rigol komandomis
         was_streaming = self.timer.isActive()
         if was_streaming:
             self.timer.stop()
@@ -270,7 +325,6 @@ class MainWindow(QMainWindow):
         except Exception as e: 
             self.log_msg(f"Klaida skaitant matavimus: {e}")
 
-        # Atstatome grafiko rodymą, jei jis buvo įjungtas prieš tai
         if was_streaming:
             self.timer.start(500)
 
@@ -294,8 +348,8 @@ class MainWindow(QMainWindow):
             self.x_data, self.y_data = t, v
             self.data_line.setData(self.x_data, self.y_data)
         except pyvisa.errors.VisaIOError:
-            pass # Ignoruojame laikiną Rigol persikrovimą
-        except Exception as e:
+            pass 
+        except Exception:
             pass
 
     def export_csv(self):
@@ -304,7 +358,77 @@ class MainWindow(QMainWindow):
         if fn:
             with open(fn, 'w', newline='') as f:
                 w = csv.writer(f)
-                w.writerow(["Laikas_s", "Itampa_V"])
+                # Naudojame vadovo antraštes dėl suderinamumo su išoriniais analizės skriptais
+                w.writerow(["Time", "Voltage"])
                 for x, y in zip(self.x_data, self.y_data):
-                    w.writerow([x, y])
+                    # Formatuojame skaičius moksliniu formatu su 10 ženklų po kablelio tikslumu
+                    w.writerow([f"{x:.10e}", f"{y:.10e}"])
             self.log_msg("Eksportuota sėkmingai.")
+
+    def save_rigol_screenshot(self):
+        addr = self.combo_osc.currentData()
+        if not addr: 
+            return self.log_msg("Klaida: Nepasirinktas oscilografas.")
+        
+        was_streaming = self.timer.isActive()
+        if was_streaming:
+            self.timer.stop()
+
+        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti ekrano nuotrauką", "rigol_screen.png", "PNG failai (*.png)")
+        if fn:
+            self.log_msg("Nuskaitoma ekrano nuotrauka iš Rigol (tai gali užtrukti)...")
+            try:
+                osc = RigolMSO(addr)
+                img_data = osc.get_screenshot()
+                osc.close()
+                
+                with open(fn, "wb") as f:
+                    f.write(img_data)
+                self.log_msg(f"Nuotrauka sėkmingai išsaugota: {fn}")
+            except Exception as e:
+                self.log_msg(f"Klaida išsaugant nuotrauką: {e}")
+
+        if was_streaming:
+            self.timer.start(500)
+
+    def fetch_tti(self, mode):
+        port = self.combo_tti.currentData()
+        if not port:
+            return self.log_msg("Klaida: Nepasirinktas TTi COM prievadas.")
+            
+        self.log_msg(f"Jungiamasi prie TTi 1604 ({port})...")
+        try:
+            tti = TTi1604(port)
+            val = tti.get_voltage() if mode == "V" else tti.get_current()
+            unit = "V" if mode == "V" else "A"
+            tti.close()
+            
+            if val is not None:
+                self.lbl_tti_res.setText(f"Reikšmė: {self.format_eng(val, unit)}")
+                self.log_msg(f"TTi matavimas: {self.format_eng(val, unit)}")
+            else:
+                self.lbl_tti_res.setText("Reikšmė: Klaida (Timeout)")
+                self.log_msg("Klaida: TTi neatsakė per nustatytą laiką.")
+        except Exception as e:
+            self.log_msg(f"Klaida komunikuojant su TTi: {e}")
+
+    def fetch_escort(self, mode):
+        port = self.combo_escort.currentData()
+        if not port:
+            return self.log_msg("Klaida: Nepasirinktas Escort COM prievadas.")
+            
+        self.log_msg(f"Jungiamasi prie Escort 3136A ({port})...")
+        try:
+            escort = Escort3136A(port)
+            val = escort.get_voltage_dc() if mode == "V" else escort.get_current_dc()
+            unit = "V" if mode == "V" else "A"
+            escort.close()
+            
+            if val is not None:
+                self.lbl_escort_res.setText(f"Reikšmė: {self.format_eng(val, unit)}")
+                self.log_msg(f"Escort matavimas: {self.format_eng(val, unit)}")
+            else:
+                self.lbl_escort_res.setText("Reikšmė: Nepavyko nuskaityti")
+                self.log_msg("Klaida: Escort negrąžino tinkamo atsakymo.")
+        except Exception as e:
+            self.log_msg(f"Klaida komunikuojant su Escort: {e}")
