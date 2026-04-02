@@ -1,7 +1,8 @@
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QDoubleSpinBox, QFormLayout, QComboBox, 
-                             QTextEdit, QTabWidget, QGroupBox, QGridLayout)
+                             QTextEdit, QTabWidget, QGroupBox, QGridLayout, 
+                             QProgressBar, QSpinBox)
 
 class Ui_MainWindow:
     def setup_ui(self, MainWindow):
@@ -141,10 +142,60 @@ class Ui_MainWindow:
         escort_layout.addWidget(self.lbl_escort_res)
         escort_layout.addStretch()
 
+        # --- TAB 5: Bode Plot (Automatizacija) ---
+        bode_tab = QWidget()
+        bode_layout = QVBoxLayout(bode_tab)
+        
+        bode_settings = QFormLayout()
+        self.bode_start_f = QDoubleSpinBox()
+        self.bode_start_f.setRange(1, 1e8); self.bode_start_f.setValue(10); self.bode_start_f.setSuffix(" Hz")
+        self.bode_stop_f = QDoubleSpinBox()
+        self.bode_stop_f.setRange(10, 1e8); self.bode_stop_f.setValue(10000); self.bode_stop_f.setSuffix(" Hz")
+        
+        self.bode_points = QSpinBox()
+        self.bode_points.setRange(2, 10000); self.bode_points.setValue(50)
+        
+        self.bode_amp = QDoubleSpinBox()
+        self.bode_amp.setRange(0.01, 20.0); self.bode_amp.setValue(1.0); self.bode_amp.setSuffix(" Vpp")
+        
+        self.bode_device = QComboBox()
+        self.bode_device.addItems(["Rigol MSO (Vpp)", "TTi 1604 (V)", "Escort 3136A (V)"])
+        
+        bode_settings.addRow("Pradinis dažnis:", self.bode_start_f)
+        bode_settings.addRow("Galinis dažnis:", self.bode_stop_f)
+        bode_settings.addRow("Taškų skaičius:", self.bode_points)
+        bode_settings.addRow("Testinė amplitudė (Vin):", self.bode_amp)
+        bode_settings.addRow("Matavimo prietaisas:", self.bode_device)
+        
+        btn_layout_bode = QHBoxLayout()
+        self.btn_start_bode = QPushButton("Pradėti Bode skenavimą")
+        self.btn_stop_bode = QPushButton("Stabdyti")
+        self.btn_export_bode = QPushButton("Eksportuoti CSV")
+        self.btn_start_bode.setStyleSheet("background-color: #E91E63; color: white; font-weight: bold;")
+        
+        btn_layout_bode.addWidget(self.btn_start_bode)
+        btn_layout_bode.addWidget(self.btn_stop_bode)
+        btn_layout_bode.addWidget(self.btn_export_bode)
+        
+        self.bode_progress = QProgressBar()
+        self.bode_progress.setValue(0)
+        
+        self.bode_graph = pg.PlotWidget(title="Amplitudės-Dažnio Charakteristika")
+        self.bode_graph.setLabel('left', 'Stiprinimas', units='dB')
+        self.bode_graph.setLabel('bottom', 'Dažnis', units='Hz (Log)')
+        self.bode_graph.setLogMode(x=True, y=False)
+        self.bode_graph.showGrid(x=True, y=True)
+        
+        bode_layout.addLayout(bode_settings)
+        bode_layout.addLayout(btn_layout_bode)
+        bode_layout.addWidget(self.bode_progress)
+        bode_layout.addWidget(self.bode_graph)
+
         tabs.addTab(gen_tab, "Generatorius (SDG)")
         tabs.addTab(osc_tab, "Oscilografas (MSO)")
         tabs.addTab(tti_tab, "Multimetras 1 (TTi)")
         tabs.addTab(escort_tab, "Multimetras 2 (Escort)")
+        tabs.addTab(bode_tab, "Bode Plot (Auto)")
 
         # 3. Bendras valdymas
         self.btn_start_stream = QPushButton("Pradėti gyvą rodymą")
@@ -155,7 +206,7 @@ class Ui_MainWindow:
 
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setMinimumHeight(200)
+        self.log_console.setMinimumHeight(150)
         self.log_console.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: Consolas;")
 
         left_panel.addWidget(conn_group)
