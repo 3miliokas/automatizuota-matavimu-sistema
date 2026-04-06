@@ -5,7 +5,7 @@ from datetime import datetime
 import numpy as np
 import pyvisa
 import serial.tools.list_ports
-from PyQt6.QtWidgets import QMainWindow, QFileDialog
+from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox
 from PyQt6.QtCore import QTimer, QThread, pyqtSignal
 
 from gui.ui_layout import Ui_MainWindow
@@ -15,18 +15,18 @@ from instruments.tti import TTi1604
 from instruments.escort import Escort3136A
 
 # =======================================================
-# FONO PROCESAS: Bode Plot automatizacija (Multithreading)
+# FONO PROCESAS 1: Bode Plot automatizacija
 # =======================================================
 class BodeSweepWorker(QThread):
     progress = pyqtSignal(int)
-    data_point = pyqtSignal(float, float) # Dažnis, Įtampa
+    data_point = pyqtSignal(float, float) 
     finished = pyqtSignal()
     error = pyqtSignal(str)
 
     def __init__(self, gen_addr, meas_dev, meas_addr, start_f, stop_f, points, amp):
         super().__init__()
         self.gen_addr = gen_addr
-        self.meas_dev = meas_dev # 0=Rigol, 1=TTi, 2=Escort
+        self.meas_dev = meas_dev 
         self.meas_addr = meas_addr
         self.start_f = start_f
         self.stop_f = stop_f
@@ -36,10 +36,7 @@ class BodeSweepWorker(QThread):
 
     def run(self):
         try:
-            # Sugeneruojame logaritminį dažnių vektorių (pvz. nuo 10 Hz iki 10 kHz)
             freqs = np.logspace(np.log10(self.start_f), np.log10(self.stop_f), self.points)
-            
-            # Prisijungiame prie instrumentų
             gen = SiglentSDG(self.gen_addr)
             meas = None
             if self.meas_dev == 0: meas = RigolMSO(self.meas_addr)
@@ -47,29 +44,79 @@ class BodeSweepWorker(QThread):
             elif self.meas_dev == 2: meas = Escort3136A(self.meas_addr)
 
             for i, f in enumerate(freqs):
-                if not self.is_running:
-                    break
-                
-                # Nustatome dažnį
+                if not self.is_running: break
                 gen.apply_waveform("Sine", f, self.amp, 0, 0, 50, 50)
-                time.sleep(0.5) # Nusistovėjimo laikas grandinei (500ms)
+                time.sleep(0.5) 
 
-                # Nuskaitome atsaką
                 val = 0.0
-                if self.meas_dev == 0:
-                    val = meas.get_measure("VPP")
-                elif self.meas_dev == 1:
-                    val = meas.get_voltage()
-                elif self.meas_dev == 2:
-                    val = meas.get_voltage_dc()
+                if self.meas_dev == 0: val = meas.get_measure("VPP")
+                elif self.meas_dev == 1: val = meas.get_voltage()
+                elif self.meas_dev == 2: val = meas.get_voltage_dc()
                 
-                if val is None or val > 1e15: 
-                    val = 1e-6 # Filtruojame šiukšles, kad dB apskaičiavimas nenulūžtų
-
+                if val is None or val > 1e15: val = 1e-6 
                 self.data_point.emit(f, val)
                 self.progress.emit(int((i + 1) / self.points * 100))
 
             gen.close()
+            if meas: meas.close()
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(str(e))
+
+# =======================================================
+# FONO PROCESAS 2: Ilgalaikis registravimas (Data Logging)
+# =======================================================
+class DataLoggerWorker(QThread):
+    data_point = pyqtSignal(float, float) # T_elapsed, Value
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self, dev_idx, addr, mode_idx, interval, duration_m, filepath):
+        super().__init__()
+        self.dev_idx = dev_idx # 0=TTi, 1=Escort
+        self.addr = addr
+        self.mode_idx = mode_idx # 0=V, 1=A
+        self.interval = interval
+        self.duration_s = duration_m * 60
+        self.filepath = filepath
+        self.is_running = True
+
+    def run(self):
+        try:
+            meas = None
+            if self.dev_idx == 0: meas = TTi1604(self.addr)
+            elif self.dev_idx == 1: meas = Escort3136A(self.addr)
+
+            with open(self.filepath, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Timestamp", "Time_s", "Value"])
+                
+                start_time = time.time()
+                while self.is_running:
+                    loop_start = time.time()
+                    elapsed = loop_start - start_time
+                    
+                    if self.duration_s > 0 and elapsed >= self.duration_s:
+                        break
+
+                    val = None
+                    if self.dev_idx == 0:
+                        val = meas.get_voltage() if self.mode_idx == 0 else meas.get_current()
+                    elif self.dev_idx == 1:
+                        val = meas.get_voltage_dc() if self.mode_idx == 0 else meas.get_current_dc()
+
+                    if val is not None:
+                        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        writer.writerow([ts, f"{elapsed:.2f}", f"{val:.6e}"])
+                        f.flush() # Užtikrina tiesioginį disko įrašymą
+                        self.data_point.emit(elapsed, val)
+
+                    # Palaiko tikslų intervalą neatsižvelgiant į išskaitymo vėlavimą
+                    process_time = time.time() - loop_start
+                    sleep_time = self.interval - process_time
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+
             if meas: meas.close()
             self.finished.emit()
 
@@ -82,7 +129,6 @@ class BodeSweepWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
         self.ui = Ui_MainWindow()
         self.ui.setup_ui(self)
 
@@ -92,14 +138,20 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_plot_from_rigol)
 
-        # Bode Plot kintamieji
+        # Bode kintamieji
         self.bode_worker = None
-        self.bode_freqs = [] # Originalūs dažniai eksportui
-        self.bode_x = []     # Logaritminiai dažniai braižymui (PyQtGraph formatas)
-        self.bode_y = []     # Decibelai
+        self.bode_freqs = [] 
+        self.bode_x = []     
+        self.bode_y = []     
         self.bode_line = self.ui.bode_graph.plot(self.bode_x, self.bode_y, pen='c', symbol='o')
 
-        # Signalų susiejimas
+        # Data Logger kintamieji
+        self.log_worker = None
+        self.log_x = []
+        self.log_y = []
+        self.log_line = self.ui.log_graph.plot(self.log_x, self.log_y, pen='g')
+
+        # Signalai
         self.ui.btn_scan.clicked.connect(self.scan_devices)
         self.ui.btn_apply_gen.clicked.connect(self.apply_generator)
         self.ui.btn_auto.clicked.connect(self.trigger_autoscale)
@@ -115,30 +167,68 @@ class MainWindow(QMainWindow):
         self.ui.btn_escort_v.clicked.connect(lambda: self.fetch_escort("V"))
         self.ui.btn_escort_a.clicked.connect(lambda: self.fetch_escort("A"))
         
-        # Bode signalai
         self.ui.btn_start_bode.clicked.connect(self.start_bode_sweep)
         self.ui.btn_stop_bode.clicked.connect(self.stop_bode_sweep)
         self.ui.btn_export_bode.clicked.connect(self.export_bode_csv)
 
-    # --- BODE PLOT FUNKCIJOS ---
+        self.ui.btn_start_log.clicked.connect(self.start_logging)
+        self.ui.btn_stop_log.clicked.connect(self.stop_logging)
 
+    # --- DATA LOGGER FUNKCIJOS ---
+    def start_logging(self):
+        dev_idx = self.ui.log_device.currentIndex()
+        addr = self.ui.combo_tti.currentData() if dev_idx == 0 else self.ui.combo_escort.currentData()
+        
+        if not addr:
+            return self.log_msg("Klaida: Nepasirinktas prietaisas registravimui.")
+
+        fn, _ = QFileDialog.getSaveFileName(self, "Pasirinkite failą įrašymui", "matavimai_log.csv", "CSV (*.csv)")
+        if not fn: return
+
+        self.log_x.clear()
+        self.log_y.clear()
+        self.log_line.setData(self.log_x, self.log_y)
+        self.ui.btn_start_log.setEnabled(False)
+        self.log_msg(f"Pradedamas duomenų registravimas į: {fn}")
+
+        self.log_worker = DataLoggerWorker(
+            dev_idx=dev_idx, addr=addr, mode_idx=self.ui.log_mode.currentIndex(),
+            interval=self.ui.log_interval.value(), duration_m=self.ui.log_duration.value(),
+            filepath=fn
+        )
+        self.log_worker.data_point.connect(self.on_log_data)
+        self.log_worker.finished.connect(self.on_log_finished)
+        self.log_worker.error.connect(lambda e: self.log_msg(f"Logger klaida: {e}"))
+        self.log_worker.start()
+
+    def on_log_data(self, t, val):
+        self.log_x.append(t)
+        self.log_y.append(val)
+        self.log_line.setData(self.log_x, self.log_y)
+        unit = "V" if self.ui.log_mode.currentIndex() == 0 else "A"
+        self.ui.lbl_log_current.setText(f"Dabartinė reikšmė: {self.format_eng(val, unit)}")
+
+    def stop_logging(self):
+        if self.log_worker and self.log_worker.isRunning():
+            self.log_worker.is_running = False
+            self.log_msg("Stabdomas registravimas...")
+
+    def on_log_finished(self):
+        self.log_msg("Duomenų registravimas baigtas.")
+        self.ui.btn_start_log.setEnabled(True)
+
+    # --- BODE PLOT FUNKCIJOS ---
     def start_bode_sweep(self):
         gen_addr = self.ui.combo_gen.currentData()
-        if not gen_addr:
-            return self.log_msg("Klaida: Nepasirinktas generatorius.")
-            
+        if not gen_addr: return self.log_msg("Klaida: Nepasirinktas generatorius.")
         dev_idx = self.ui.bode_device.currentIndex()
         meas_addr = None
         if dev_idx == 0: meas_addr = self.ui.combo_osc.currentData()
         elif dev_idx == 1: meas_addr = self.ui.combo_tti.currentData()
         elif dev_idx == 2: meas_addr = self.ui.combo_escort.currentData()
-        
-        if not meas_addr:
-            return self.log_msg("Klaida: Nepasirinktas matavimo prietaisas!")
+        if not meas_addr: return self.log_msg("Klaida: Nepasirinktas matavimo prietaisas!")
 
-        # Sustabdome gyvą oscilogramą, kad prietaisas nepersikrautų nuo komandų
-        if self.timer.isActive():
-            self.timer.stop()
+        if self.timer.isActive(): self.timer.stop()
 
         self.bode_freqs.clear()
         self.bode_x.clear()
@@ -162,12 +252,9 @@ class MainWindow(QMainWindow):
     def on_bode_data(self, freq, val):
         v_in = self.ui.bode_amp.value()
         if val <= 0: val = 1e-6
-        
-        # Apskaičiuojame stiprinimą decibelais (dB = 20 * log10(Vout/Vin))
         db = 20 * math.log10(val / v_in)
-        
         self.bode_freqs.append(freq)
-        self.bode_x.append(math.log10(freq)) # Grafikas su setLogMode() reikalauja log10() duomenų
+        self.bode_x.append(math.log10(freq)) 
         self.bode_y.append(db)
         self.bode_line.setData(self.bode_x, self.bode_y)
         self.log_msg(f"F: {freq:.1f} Hz, Vout: {val:.4f} V, Stiprinimas: {db:.2f} dB")
@@ -183,17 +270,16 @@ class MainWindow(QMainWindow):
 
     def export_bode_csv(self):
         if not self.bode_freqs: return
-        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti Bode duomenis", "bode_plot.csv", "CSV (*.csv)")
+        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti Bode", "bode_plot.csv", "CSV (*.csv)")
         if fn:
             with open(fn, 'w', newline='') as f:
                 w = csv.writer(f)
                 w.writerow(["Frequency_Hz", "Gain_dB"])
                 for f_hz, db in zip(self.bode_freqs, self.bode_y):
                     w.writerow([f"{f_hz:.2f}", f"{db:.4f}"])
-            self.log_msg("Bode duomenys eksportuoti sėkmingai.")
+            self.log_msg("Bode eksportuoti sėkmingai.")
 
-    # --- BAZINĖS FUNKCIJOS (Nepakeistos) ---
-
+    # --- BAZINĖS FUNKCIJOS ---
     def log_msg(self, text):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.ui.log_console.append(f"[{timestamp}] {text}")
@@ -231,7 +317,6 @@ class MainWindow(QMainWindow):
             port_info = f"{port.device} - {port.description}"
             self.ui.combo_tti.addItem(port_info, port.device)
             self.ui.combo_escort.addItem(port_info, port.device)
-            
         self.log_msg("Skenavimas baigtas.")
 
     def get_freq_hz(self):

@@ -2,7 +2,7 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QDoubleSpinBox, QFormLayout, QComboBox, 
                              QTextEdit, QTabWidget, QGroupBox, QGridLayout, 
-                             QProgressBar, QSpinBox)
+                             QProgressBar, QSpinBox, QLineEdit)
 
 class Ui_MainWindow:
     def setup_ui(self, MainWindow):
@@ -117,12 +117,10 @@ class Ui_MainWindow:
         # --- TAB 3: TTi 1604 Multimetras ---
         tti_tab = QWidget()
         tti_layout = QVBoxLayout(tti_tab)
-        
         self.btn_tti_v = QPushButton("Matuoti Įtampą (V)")
         self.btn_tti_a = QPushButton("Matuoti Srovę (A)")
         self.lbl_tti_res = QLabel("Reikšmė: -")
         self.lbl_tti_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
-        
         tti_layout.addWidget(self.btn_tti_v)
         tti_layout.addWidget(self.btn_tti_a)
         tti_layout.addWidget(self.lbl_tti_res)
@@ -131,12 +129,10 @@ class Ui_MainWindow:
         # --- TAB 4: Escort 3136A Multimetras ---
         escort_tab = QWidget()
         escort_layout = QVBoxLayout(escort_tab)
-        
         self.btn_escort_v = QPushButton("Matuoti Įtampą (V)")
         self.btn_escort_a = QPushButton("Matuoti Srovę (A)")
         self.lbl_escort_res = QLabel("Reikšmė: -")
         self.lbl_escort_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #FF9800;")
-        
         escort_layout.addWidget(self.btn_escort_v)
         escort_layout.addWidget(self.btn_escort_a)
         escort_layout.addWidget(self.lbl_escort_res)
@@ -151,13 +147,10 @@ class Ui_MainWindow:
         self.bode_start_f.setRange(1, 1e8); self.bode_start_f.setValue(10); self.bode_start_f.setSuffix(" Hz")
         self.bode_stop_f = QDoubleSpinBox()
         self.bode_stop_f.setRange(10, 1e8); self.bode_stop_f.setValue(10000); self.bode_stop_f.setSuffix(" Hz")
-        
         self.bode_points = QSpinBox()
         self.bode_points.setRange(2, 10000); self.bode_points.setValue(50)
-        
         self.bode_amp = QDoubleSpinBox()
         self.bode_amp.setRange(0.01, 20.0); self.bode_amp.setValue(1.0); self.bode_amp.setSuffix(" Vpp")
-        
         self.bode_device = QComboBox()
         self.bode_device.addItems(["Rigol MSO (Vpp)", "TTi 1604 (V)", "Escort 3136A (V)"])
         
@@ -191,14 +184,59 @@ class Ui_MainWindow:
         bode_layout.addWidget(self.bode_progress)
         bode_layout.addWidget(self.bode_graph)
 
+        # --- TAB 6: Data Logger (Ilgalaikis registravimas) ---
+        log_tab = QWidget()
+        log_layout = QVBoxLayout(log_tab)
+        
+        log_settings = QFormLayout()
+        self.log_device = QComboBox()
+        self.log_device.addItems(["TTi 1604", "Escort 3136A"])
+        
+        self.log_mode = QComboBox()
+        self.log_mode.addItems(["Įtampa (V)", "Srovė (A)"])
+        
+        self.log_interval = QDoubleSpinBox()
+        self.log_interval.setRange(0.5, 3600.0); self.log_interval.setValue(1.0); self.log_interval.setSuffix(" s")
+        
+        self.log_duration = QSpinBox()
+        self.log_duration.setRange(0, 10000); self.log_duration.setValue(0); self.log_duration.setSuffix(" min (0 = begalinis)")
+        
+        log_settings.addRow("Prietaisas:", self.log_device)
+        log_settings.addRow("Matavimo tipas:", self.log_mode)
+        log_settings.addRow("Intervalas:", self.log_interval)
+        log_settings.addRow("Trukmė:", self.log_duration)
+        
+        btn_layout_log = QHBoxLayout()
+        self.btn_start_log = QPushButton("Pradėti registravimą")
+        self.btn_stop_log = QPushButton("Stabdyti")
+        self.btn_start_log.setStyleSheet("background-color: #FF5722; color: white; font-weight: bold;")
+        
+        btn_layout_log.addWidget(self.btn_start_log)
+        btn_layout_log.addWidget(self.btn_stop_log)
+        
+        self.lbl_log_current = QLabel("Dabartinė reikšmė: -")
+        self.lbl_log_current.setStyleSheet("font-weight: bold; font-size: 18px; color: #FFC107;")
+        
+        self.log_graph = pg.PlotWidget(title="Duomenų Trendas (Realus laikas)")
+        self.log_graph.setLabel('left', 'Reikšmė')
+        self.log_graph.setLabel('bottom', 'Laikas', units='s')
+        self.log_graph.showGrid(x=True, y=True)
+        
+        log_layout.addLayout(log_settings)
+        log_layout.addLayout(btn_layout_log)
+        log_layout.addWidget(self.lbl_log_current)
+        log_layout.addWidget(self.log_graph)
+
+        # Pridedame visus skirtukus
         tabs.addTab(gen_tab, "Generatorius (SDG)")
         tabs.addTab(osc_tab, "Oscilografas (MSO)")
         tabs.addTab(tti_tab, "Multimetras 1 (TTi)")
         tabs.addTab(escort_tab, "Multimetras 2 (Escort)")
         tabs.addTab(bode_tab, "Bode Plot (Auto)")
+        tabs.addTab(log_tab, "Data Logger")
 
         # 3. Bendras valdymas
-        self.btn_start_stream = QPushButton("Pradėti gyvą rodymą")
+        self.btn_start_stream = QPushButton("Pradėti gyvą rodymą (Oscilografas)")
         self.btn_stop_stream = QPushButton("Stabdyti gyvą rodymą")
         self.btn_export = QPushButton("Eksportuoti CSV")
         self.btn_start_stream.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
