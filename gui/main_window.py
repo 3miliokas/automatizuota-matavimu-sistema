@@ -15,7 +15,7 @@ from instruments.tti import TTi1604
 from instruments.escort import Escort3136A
 
 # =======================================================
-# FONO PROCESAS 1: Bode Plot automatizacija
+# FONO PROCESAI (Bode ir Data Logger)
 # =======================================================
 class BodeSweepWorker(QThread):
     progress = pyqtSignal(int)
@@ -63,19 +63,16 @@ class BodeSweepWorker(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
-# =======================================================
-# FONO PROCESAS 2: Ilgalaikis registravimas (Data Logging)
-# =======================================================
 class DataLoggerWorker(QThread):
-    data_point = pyqtSignal(float, float) # T_elapsed, Value
+    data_point = pyqtSignal(float, float) 
     finished = pyqtSignal()
     error = pyqtSignal(str)
 
     def __init__(self, dev_idx, addr, mode_idx, interval, duration_m, filepath):
         super().__init__()
-        self.dev_idx = dev_idx # 0=TTi, 1=Escort
+        self.dev_idx = dev_idx 
         self.addr = addr
-        self.mode_idx = mode_idx # 0=V, 1=A
+        self.mode_idx = mode_idx 
         self.interval = interval
         self.duration_s = duration_m * 60
         self.filepath = filepath
@@ -95,9 +92,7 @@ class DataLoggerWorker(QThread):
                 while self.is_running:
                     loop_start = time.time()
                     elapsed = loop_start - start_time
-                    
-                    if self.duration_s > 0 and elapsed >= self.duration_s:
-                        break
+                    if self.duration_s > 0 and elapsed >= self.duration_s: break
 
                     val = None
                     if self.dev_idx == 0:
@@ -108,18 +103,15 @@ class DataLoggerWorker(QThread):
                     if val is not None:
                         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         writer.writerow([ts, f"{elapsed:.2f}", f"{val:.6e}"])
-                        f.flush() # Užtikrina tiesioginį disko įrašymą
+                        f.flush()
                         self.data_point.emit(elapsed, val)
 
-                    # Palaiko tikslų intervalą neatsižvelgiant į išskaitymo vėlavimą
                     process_time = time.time() - loop_start
                     sleep_time = self.interval - process_time
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
+                    if sleep_time > 0: time.sleep(sleep_time)
 
             if meas: meas.close()
             self.finished.emit()
-
         except Exception as e:
             self.error.emit(str(e))
 
@@ -132,24 +124,25 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setup_ui(self)
 
-        # Oscilogramos kintamieji
         self.x_data, self.y_data = [], []
         self.data_line = self.ui.graph_widget.plot(self.x_data, self.y_data, pen='y')
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_plot_from_rigol)
 
-        # Bode kintamieji
         self.bode_worker = None
         self.bode_freqs = [] 
         self.bode_x = []     
         self.bode_y = []     
         self.bode_line = self.ui.bode_graph.plot(self.bode_x, self.bode_y, pen='c', symbol='o')
 
-        # Data Logger kintamieji
         self.log_worker = None
         self.log_x = []
         self.log_y = []
         self.log_line = self.ui.log_graph.plot(self.log_x, self.log_y, pen='g')
+
+        self.fft_x = []
+        self.fft_y = []
+        self.fft_line = self.ui.fft_graph.plot(self.fft_x, self.fft_y, pen='m', fillLevel=0, brush=(156,39,176,50))
 
         # Signalai
         self.ui.btn_scan.clicked.connect(self.scan_devices)
@@ -173,38 +166,75 @@ class MainWindow(QMainWindow):
 
         self.ui.btn_start_log.clicked.connect(self.start_logging)
         self.ui.btn_stop_log.clicked.connect(self.stop_logging)
+        
+        self.ui.btn_calc_fft.clicked.connect(self.calculate_fft)
+
+    # --- FFT FUNKCIJOS ---
+    def calculate_fft(self):
+        addr = self.ui.combo_osc.currentData()
+        if not addr: return self.log_msg("Klaida: Nepasirinktas oscilografas FFT skaičiavimui.")
+
+        was_streaming = self.timer.isActive()
+        if was_streaming: self.timer.stop()
+
+        self.log_msg("Nuskaitomi duomenys FFT skaičiavimui iš Rigol...")
+        try:
+            osc = RigolMSO(addr)
+            t, v = osc.get_waveform_data(channel=1)
+            osc.close()
+
+            if len(t) < 2: 
+                raise ValueError("Nepakanka taškų FFT skaičiavimui.")
+
+            dt = t[1] - t[0]
+            if dt <= 0: raise ValueError("Klaidingas laiko intervalas iš oscilografo.")
+            
+            n = len(v)
+            
+            # FFT Skaičiavimas naudojant numpy
+            yf = np.fft.fft(v)
+            xf = np.fft.fftfreq(n, d=dt)
+
+            half_n = n // 2
+            self.fft_x = xf[:half_n]
+            self.fft_y = 2.0 / n * np.abs(yf[:half_n])
+            
+            self.fft_y[0] = 0 # DC Komponentės (0 Hz) šalinimas grafikui
+
+            self.fft_line.setData(self.fft_x, self.fft_y)
+
+            peak_idx = np.argmax(self.fft_y)
+            peak_freq = self.fft_x[peak_idx]
+            peak_amp = self.fft_y[peak_idx]
+            self.ui.lbl_fft_peak.setText(f"Pagrindinė harmonika (Pikas): {self.format_eng(peak_freq, 'Hz')} ({peak_amp:.3f} V)")
+            self.log_msg(f"FFT sėkmingai apskaičiuotas. Aptiktas pikas ties {peak_freq:.2f} Hz")
+
+        except Exception as e:
+            self.log_msg(f"FFT Klaida: {e}")
+
+        if was_streaming: self.timer.start(500)
 
     # --- DATA LOGGER FUNKCIJOS ---
     def start_logging(self):
         dev_idx = self.ui.log_device.currentIndex()
         addr = self.ui.combo_tti.currentData() if dev_idx == 0 else self.ui.combo_escort.currentData()
-        
-        if not addr:
-            return self.log_msg("Klaida: Nepasirinktas prietaisas registravimui.")
+        if not addr: return self.log_msg("Klaida: Nepasirinktas prietaisas registravimui.")
 
         fn, _ = QFileDialog.getSaveFileName(self, "Pasirinkite failą įrašymui", "matavimai_log.csv", "CSV (*.csv)")
         if not fn: return
 
-        self.log_x.clear()
-        self.log_y.clear()
-        self.log_line.setData(self.log_x, self.log_y)
+        self.log_x.clear(); self.log_y.clear(); self.log_line.setData(self.log_x, self.log_y)
         self.ui.btn_start_log.setEnabled(False)
         self.log_msg(f"Pradedamas duomenų registravimas į: {fn}")
 
-        self.log_worker = DataLoggerWorker(
-            dev_idx=dev_idx, addr=addr, mode_idx=self.ui.log_mode.currentIndex(),
-            interval=self.ui.log_interval.value(), duration_m=self.ui.log_duration.value(),
-            filepath=fn
-        )
+        self.log_worker = DataLoggerWorker(dev_idx, addr, self.ui.log_mode.currentIndex(), self.ui.log_interval.value(), self.ui.log_duration.value(), fn)
         self.log_worker.data_point.connect(self.on_log_data)
         self.log_worker.finished.connect(self.on_log_finished)
         self.log_worker.error.connect(lambda e: self.log_msg(f"Logger klaida: {e}"))
         self.log_worker.start()
 
     def on_log_data(self, t, val):
-        self.log_x.append(t)
-        self.log_y.append(val)
-        self.log_line.setData(self.log_x, self.log_y)
+        self.log_x.append(t); self.log_y.append(val); self.log_line.setData(self.log_x, self.log_y)
         unit = "V" if self.ui.log_mode.currentIndex() == 0 else "A"
         self.ui.lbl_log_current.setText(f"Dabartinė reikšmė: {self.format_eng(val, unit)}")
 
@@ -230,19 +260,11 @@ class MainWindow(QMainWindow):
 
         if self.timer.isActive(): self.timer.stop()
 
-        self.bode_freqs.clear()
-        self.bode_x.clear()
-        self.bode_y.clear()
-        self.bode_line.setData(self.bode_x, self.bode_y)
-        self.ui.bode_progress.setValue(0)
-        self.ui.btn_start_bode.setEnabled(False)
+        self.bode_freqs.clear(); self.bode_x.clear(); self.bode_y.clear(); self.bode_line.setData(self.bode_x, self.bode_y)
+        self.ui.bode_progress.setValue(0); self.ui.btn_start_bode.setEnabled(False)
         self.log_msg("Bode Plot matavimas pradedamas...")
 
-        self.bode_worker = BodeSweepWorker(
-            gen_addr=gen_addr, meas_dev=dev_idx, meas_addr=meas_addr,
-            start_f=self.ui.bode_start_f.value(), stop_f=self.ui.bode_stop_f.value(),
-            points=self.ui.bode_points.value(), amp=self.ui.bode_amp.value()
-        )
+        self.bode_worker = BodeSweepWorker(gen_addr, dev_idx, meas_addr, self.ui.bode_start_f.value(), self.ui.bode_stop_f.value(), self.ui.bode_points.value(), self.ui.bode_amp.value())
         self.bode_worker.data_point.connect(self.on_bode_data)
         self.bode_worker.progress.connect(self.ui.bode_progress.setValue)
         self.bode_worker.finished.connect(self.on_bode_finished)
@@ -253,9 +275,7 @@ class MainWindow(QMainWindow):
         v_in = self.ui.bode_amp.value()
         if val <= 0: val = 1e-6
         db = 20 * math.log10(val / v_in)
-        self.bode_freqs.append(freq)
-        self.bode_x.append(math.log10(freq)) 
-        self.bode_y.append(db)
+        self.bode_freqs.append(freq); self.bode_x.append(math.log10(freq)); self.bode_y.append(db)
         self.bode_line.setData(self.bode_x, self.bode_y)
         self.log_msg(f"F: {freq:.1f} Hz, Vout: {val:.4f} V, Stiprinimas: {db:.2f} dB")
 
@@ -275,8 +295,7 @@ class MainWindow(QMainWindow):
             with open(fn, 'w', newline='') as f:
                 w = csv.writer(f)
                 w.writerow(["Frequency_Hz", "Gain_dB"])
-                for f_hz, db in zip(self.bode_freqs, self.bode_y):
-                    w.writerow([f"{f_hz:.2f}", f"{db:.4f}"])
+                for f_hz, db in zip(self.bode_freqs, self.bode_y): w.writerow([f"{f_hz:.2f}", f"{db:.4f}"])
             self.log_msg("Bode eksportuoti sėkmingai.")
 
     # --- BAZINĖS FUNKCIJOS ---
@@ -359,7 +378,6 @@ class MainWindow(QMainWindow):
         if not addr: return
         was_streaming = self.timer.isActive()
         if was_streaming: self.timer.stop()
-
         self.log_msg("Skaitomi aparatūriniai matavimai...")
         try:
             osc = RigolMSO(addr)
@@ -371,7 +389,6 @@ class MainWindow(QMainWindow):
             self.ui.lbl_meas_fall.setText(f"Fall Time: {self.format_eng(osc.get_measure('FALLtime'), 's')}")
             osc.close()
         except Exception as e: self.log_msg(f"Klaida: {e}")
-
         if was_streaming: self.timer.start(500)
 
     def start_stream(self):
@@ -410,7 +427,6 @@ class MainWindow(QMainWindow):
         if not addr: return self.log_msg("Klaida.")
         was_streaming = self.timer.isActive()
         if was_streaming: self.timer.stop()
-
         fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti ekrano nuotrauką", "rigol_screen.png", "PNG (*.png)")
         if fn:
             try:
@@ -420,7 +436,6 @@ class MainWindow(QMainWindow):
                 with open(fn, "wb") as f: f.write(img_data)
                 self.log_msg(f"Nuotrauka sėkmingai išsaugota: {fn}")
             except Exception as e: self.log_msg(f"Klaida: {e}")
-
         if was_streaming: self.timer.start(500)
 
     def fetch_tti(self, mode):
