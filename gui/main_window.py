@@ -1,6 +1,7 @@
 import csv
 import math
 import time
+import os
 from datetime import datetime
 import numpy as np
 import pyvisa
@@ -47,7 +48,6 @@ class BodeSweepWorker(QThread):
                 if not self.is_running: break
                 gen.apply_waveform("Sine", f, self.amp, 0, 0, 50, 50)
                 time.sleep(0.5) 
-
                 val = 0.0
                 if self.meas_dev == 0: val = meas.get_measure("VPP")
                 elif self.meas_dev == 1: val = meas.get_voltage()
@@ -87,7 +87,6 @@ class DataLoggerWorker(QThread):
             with open(self.filepath, 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["Timestamp", "Time_s", "Value"])
-                
                 start_time = time.time()
                 while self.is_running:
                     loop_start = time.time()
@@ -95,10 +94,8 @@ class DataLoggerWorker(QThread):
                     if self.duration_s > 0 and elapsed >= self.duration_s: break
 
                     val = None
-                    if self.dev_idx == 0:
-                        val = meas.get_voltage() if self.mode_idx == 0 else meas.get_current()
-                    elif self.dev_idx == 1:
-                        val = meas.get_voltage_dc() if self.mode_idx == 0 else meas.get_current_dc()
+                    if self.dev_idx == 0: val = meas.get_voltage() if self.mode_idx == 0 else meas.get_current()
+                    elif self.dev_idx == 1: val = meas.get_voltage_dc() if self.mode_idx == 0 else meas.get_current_dc()
 
                     if val is not None:
                         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -136,12 +133,10 @@ class MainWindow(QMainWindow):
         self.bode_line = self.ui.bode_graph.plot(self.bode_x, self.bode_y, pen='c', symbol='o')
 
         self.log_worker = None
-        self.log_x = []
-        self.log_y = []
+        self.log_x = []; self.log_y = []
         self.log_line = self.ui.log_graph.plot(self.log_x, self.log_y, pen='g')
 
-        self.fft_x = []
-        self.fft_y = []
+        self.fft_x = []; self.fft_y = []
         self.fft_line = self.ui.fft_graph.plot(self.fft_x, self.fft_y, pen='m', fillLevel=0, brush=(156,39,176,50))
 
         # Signalai
@@ -159,92 +154,136 @@ class MainWindow(QMainWindow):
         self.ui.btn_tti_a.clicked.connect(lambda: self.fetch_tti("A"))
         self.ui.btn_escort_v.clicked.connect(lambda: self.fetch_escort("V"))
         self.ui.btn_escort_a.clicked.connect(lambda: self.fetch_escort("A"))
-        
         self.ui.btn_start_bode.clicked.connect(self.start_bode_sweep)
         self.ui.btn_stop_bode.clicked.connect(self.stop_bode_sweep)
         self.ui.btn_export_bode.clicked.connect(self.export_bode_csv)
-
         self.ui.btn_start_log.clicked.connect(self.start_logging)
         self.ui.btn_stop_log.clicked.connect(self.stop_logging)
-        
         self.ui.btn_calc_fft.clicked.connect(self.calculate_fft)
+        
+        # PDF Generavimo signalas
+        self.ui.btn_generate_pdf.clicked.connect(self.generate_pdf_report)
+
+    # --- PDF ATASKAITA ---
+    def generate_pdf_report(self):
+        try:
+            from fpdf import FPDF
+            import pyqtgraph.exporters
+        except ImportError:
+            return self.log_msg("Klaida: Truksta 'fpdf' bibliotekos. Terminale iveskite: pip install fpdf")
+
+        fn, _ = QFileDialog.getSaveFileName(self, "Issaugoti PDF", "matavimu_protokolas.pdf", "PDF (*.pdf)")
+        if not fn: return
+
+        self.log_msg("Generuojamas PDF protokolas...")
+        try:
+            pdf = FPDF()
+            pdf.add_page()
+            
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(200, 10, txt="Automatizuotu Matavimu Protokolas", ln=True, align='C')
+            
+            pdf.set_font("Arial", size=12)
+            pdf.cell(200, 10, txt=f"Data ir laikas: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+            serial_text = self.ui.input_serial.text() if self.ui.input_serial.text() else "Nenurodyta"
+            pdf.cell(200, 10, txt=f"Bandomo prietaiso Serijos Nr.: {serial_text}", ln=True)
+            
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(200, 10, txt="1. Generatoriaus Nustatymai (SDG):", ln=True)
+            pdf.set_font("Arial", size=12)
+            pdf.cell(200, 8, txt=f"Tipas: {self.ui.wave_type.currentText()}", ln=True)
+            pdf.cell(200, 8, txt=f"Daznis: {self.ui.freq_in.value()} {self.ui.freq_unit.currentText()}", ln=True)
+            pdf.cell(200, 8, txt=f"Amplitude: {self.ui.amp_in.value()} Vpp", ln=True)
+            pdf.cell(200, 8, txt=f"Poslinkis: {self.ui.offset_in.value()} Vdc", ln=True)
+
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(200, 10, txt="2. Aparaturiniai Matavimai (MSO):", ln=True)
+            pdf.set_font("Arial", size=12)
+            # Remove specific LT chars to avoid FPDF crash
+            pdf.cell(200, 8, txt=self.ui.lbl_meas_vpp.text(), ln=True)
+            pdf.cell(200, 8, txt=self.ui.lbl_meas_vmax.text(), ln=True)
+            pdf.cell(200, 8, txt=self.ui.lbl_meas_vmin.text(), ln=True)
+            pdf.cell(200, 8, txt=self.ui.lbl_meas_freq.text().replace("ž", "z").replace("Dažnis", "Daznis"), ln=True)
+
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(200, 10, txt="3. Oscilograma:", ln=True)
+            
+            # Eksportuojame grafika kaip paveiksleli
+            temp_img = "temp_plot.png"
+            exporter = pyqtgraph.exporters.ImageExporter(self.ui.graph_widget.scene())
+            exporter.export(temp_img)
+            
+            # Idedame paveiksleli i PDF (X=10, plotis=190mm)
+            pdf.image(temp_img, x=10, w=190)
+            
+            pdf.output(fn)
+            self.log_msg(f"PDF ataskaita sekmingai isaugota: {fn}")
+            
+            # Istriname laikina faila
+            if os.path.exists(temp_img):
+                os.remove(temp_img)
+                
+        except Exception as e:
+            self.log_msg(f"Klaida generuojant PDF: {e}")
 
     # --- FFT FUNKCIJOS ---
     def calculate_fft(self):
         addr = self.ui.combo_osc.currentData()
-        if not addr: return self.log_msg("Klaida: Nepasirinktas oscilografas FFT skaičiavimui.")
-
+        if not addr: return self.log_msg("Klaida: Nepasirinktas oscilografas FFT.")
         was_streaming = self.timer.isActive()
         if was_streaming: self.timer.stop()
-
-        self.log_msg("Nuskaitomi duomenys FFT skaičiavimui iš Rigol...")
+        self.log_msg("Nuskaitomi duomenys FFT skaičiavimui...")
         try:
             osc = RigolMSO(addr)
             t, v = osc.get_waveform_data(channel=1)
             osc.close()
-
-            if len(t) < 2: 
-                raise ValueError("Nepakanka taškų FFT skaičiavimui.")
-
+            if len(t) < 2: raise ValueError("Nepakanka taškų.")
             dt = t[1] - t[0]
-            if dt <= 0: raise ValueError("Klaidingas laiko intervalas iš oscilografo.")
-            
+            if dt <= 0: raise ValueError("Klaidingas laiko intervalas.")
             n = len(v)
-            
-            # FFT Skaičiavimas naudojant numpy
             yf = np.fft.fft(v)
             xf = np.fft.fftfreq(n, d=dt)
-
             half_n = n // 2
             self.fft_x = xf[:half_n]
             self.fft_y = 2.0 / n * np.abs(yf[:half_n])
-            
-            self.fft_y[0] = 0 # DC Komponentės (0 Hz) šalinimas grafikui
-
+            self.fft_y[0] = 0 
             self.fft_line.setData(self.fft_x, self.fft_y)
-
             peak_idx = np.argmax(self.fft_y)
             peak_freq = self.fft_x[peak_idx]
             peak_amp = self.fft_y[peak_idx]
             self.ui.lbl_fft_peak.setText(f"Pagrindinė harmonika (Pikas): {self.format_eng(peak_freq, 'Hz')} ({peak_amp:.3f} V)")
-            self.log_msg(f"FFT sėkmingai apskaičiuotas. Aptiktas pikas ties {peak_freq:.2f} Hz")
-
+            self.log_msg(f"FFT sėkmingas. Pikas: {peak_freq:.2f} Hz")
         except Exception as e:
             self.log_msg(f"FFT Klaida: {e}")
-
         if was_streaming: self.timer.start(500)
 
     # --- DATA LOGGER FUNKCIJOS ---
     def start_logging(self):
         dev_idx = self.ui.log_device.currentIndex()
         addr = self.ui.combo_tti.currentData() if dev_idx == 0 else self.ui.combo_escort.currentData()
-        if not addr: return self.log_msg("Klaida: Nepasirinktas prietaisas registravimui.")
-
-        fn, _ = QFileDialog.getSaveFileName(self, "Pasirinkite failą įrašymui", "matavimai_log.csv", "CSV (*.csv)")
+        if not addr: return self.log_msg("Klaida: Nepasirinktas prietaisas.")
+        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti", "log.csv", "CSV (*.csv)")
         if not fn: return
-
         self.log_x.clear(); self.log_y.clear(); self.log_line.setData(self.log_x, self.log_y)
         self.ui.btn_start_log.setEnabled(False)
-        self.log_msg(f"Pradedamas duomenų registravimas į: {fn}")
-
         self.log_worker = DataLoggerWorker(dev_idx, addr, self.ui.log_mode.currentIndex(), self.ui.log_interval.value(), self.ui.log_duration.value(), fn)
         self.log_worker.data_point.connect(self.on_log_data)
         self.log_worker.finished.connect(self.on_log_finished)
-        self.log_worker.error.connect(lambda e: self.log_msg(f"Logger klaida: {e}"))
+        self.log_worker.error.connect(lambda e: self.log_msg(f"Klaida: {e}"))
         self.log_worker.start()
 
     def on_log_data(self, t, val):
         self.log_x.append(t); self.log_y.append(val); self.log_line.setData(self.log_x, self.log_y)
         unit = "V" if self.ui.log_mode.currentIndex() == 0 else "A"
-        self.ui.lbl_log_current.setText(f"Dabartinė reikšmė: {self.format_eng(val, unit)}")
+        self.ui.lbl_log_current.setText(f"Reikšmė: {self.format_eng(val, unit)}")
 
     def stop_logging(self):
-        if self.log_worker and self.log_worker.isRunning():
-            self.log_worker.is_running = False
-            self.log_msg("Stabdomas registravimas...")
+        if self.log_worker and self.log_worker.isRunning(): self.log_worker.is_running = False
 
     def on_log_finished(self):
-        self.log_msg("Duomenų registravimas baigtas.")
         self.ui.btn_start_log.setEnabled(True)
 
     # --- BODE PLOT FUNKCIJOS ---
@@ -256,19 +295,15 @@ class MainWindow(QMainWindow):
         if dev_idx == 0: meas_addr = self.ui.combo_osc.currentData()
         elif dev_idx == 1: meas_addr = self.ui.combo_tti.currentData()
         elif dev_idx == 2: meas_addr = self.ui.combo_escort.currentData()
-        if not meas_addr: return self.log_msg("Klaida: Nepasirinktas matavimo prietaisas!")
-
+        if not meas_addr: return self.log_msg("Klaida!")
         if self.timer.isActive(): self.timer.stop()
-
         self.bode_freqs.clear(); self.bode_x.clear(); self.bode_y.clear(); self.bode_line.setData(self.bode_x, self.bode_y)
         self.ui.bode_progress.setValue(0); self.ui.btn_start_bode.setEnabled(False)
-        self.log_msg("Bode Plot matavimas pradedamas...")
-
         self.bode_worker = BodeSweepWorker(gen_addr, dev_idx, meas_addr, self.ui.bode_start_f.value(), self.ui.bode_stop_f.value(), self.ui.bode_points.value(), self.ui.bode_amp.value())
         self.bode_worker.data_point.connect(self.on_bode_data)
         self.bode_worker.progress.connect(self.ui.bode_progress.setValue)
         self.bode_worker.finished.connect(self.on_bode_finished)
-        self.bode_worker.error.connect(lambda e: self.log_msg(f"Bode klaida: {e}"))
+        self.bode_worker.error.connect(lambda e: self.log_msg(f"Klaida: {e}"))
         self.bode_worker.start()
 
     def on_bode_data(self, freq, val):
@@ -277,26 +312,21 @@ class MainWindow(QMainWindow):
         db = 20 * math.log10(val / v_in)
         self.bode_freqs.append(freq); self.bode_x.append(math.log10(freq)); self.bode_y.append(db)
         self.bode_line.setData(self.bode_x, self.bode_y)
-        self.log_msg(f"F: {freq:.1f} Hz, Vout: {val:.4f} V, Stiprinimas: {db:.2f} dB")
 
     def stop_bode_sweep(self):
-        if self.bode_worker and self.bode_worker.isRunning():
-            self.bode_worker.is_running = False
-            self.log_msg("Stabdoma...")
+        if self.bode_worker and self.bode_worker.isRunning(): self.bode_worker.is_running = False
 
     def on_bode_finished(self):
-        self.log_msg("Bode Plot matavimas baigtas.")
         self.ui.btn_start_bode.setEnabled(True)
 
     def export_bode_csv(self):
         if not self.bode_freqs: return
-        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti Bode", "bode_plot.csv", "CSV (*.csv)")
+        fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti", "", "CSV (*.csv)")
         if fn:
             with open(fn, 'w', newline='') as f:
                 w = csv.writer(f)
                 w.writerow(["Frequency_Hz", "Gain_dB"])
                 for f_hz, db in zip(self.bode_freqs, self.bode_y): w.writerow([f"{f_hz:.2f}", f"{db:.4f}"])
-            self.log_msg("Bode eksportuoti sėkmingai.")
 
     # --- BAZINĖS FUNKCIJOS ---
     def log_msg(self, text):
@@ -331,7 +361,6 @@ class MainWindow(QMainWindow):
                 if "SDG" in idn: self.ui.combo_gen.addItem(f"{name} [{addr}]", addr)
                 elif "DS1" in idn or "MSO" in idn: self.ui.combo_osc.addItem(f"{name} [{addr}]", addr)
             except Exception: pass
-                
         for port in serial.tools.list_ports.comports():
             port_info = f"{port.device} - {port.description}"
             self.ui.combo_tti.addItem(port_info, port.device)
@@ -344,14 +373,13 @@ class MainWindow(QMainWindow):
 
     def apply_generator(self):
         addr = self.ui.combo_gen.currentData()
-        if not addr: return self.log_msg("Nepasirinktas generatorius.")
+        if not addr: return
         try:
             gen = SiglentSDG(addr)
             gen.apply_waveform(self.ui.wave_type.currentText(), self.get_freq_hz(), 
                                self.ui.amp_in.value(), self.ui.offset_in.value(),
                                self.ui.phase_in.value(), self.ui.duty_in.value(), self.ui.sym_in.value())
             gen.close()
-            self.log_msg("Generatorius atnaujintas.")
         except Exception as e: self.log_msg(f"Klaida: {e}")
 
     def trigger_autoscale(self):
@@ -359,9 +387,7 @@ class MainWindow(QMainWindow):
         if not addr: return
         try:
             osc = RigolMSO(addr)
-            osc.auto_scale()
-            osc.close()
-            self.log_msg("Rigol Auto-Scale iškviestas.")
+            osc.auto_scale(); osc.close()
         except Exception as e: self.log_msg(f"Klaida: {e}")
 
     def control_osc(self, state):
@@ -378,7 +404,6 @@ class MainWindow(QMainWindow):
         if not addr: return
         was_streaming = self.timer.isActive()
         if was_streaming: self.timer.stop()
-        self.log_msg("Skaitomi aparatūriniai matavimai...")
         try:
             osc = RigolMSO(addr)
             self.ui.lbl_meas_vpp.setText(f"Vpp: {self.format_eng(osc.get_measure('VPP'), 'V')}")
@@ -392,13 +417,11 @@ class MainWindow(QMainWindow):
         if was_streaming: self.timer.start(500)
 
     def start_stream(self):
-        if not self.ui.combo_osc.currentData(): return self.log_msg("Klaida: Nepasirinktas oscilografas.")
+        if not self.ui.combo_osc.currentData(): return
         self.timer.start(500) 
-        self.log_msg("Duomenų srautas pradėtas.")
 
     def stop_stream(self):
         self.timer.stop()
-        self.log_msg("Duomenų srautas sustabdytas.")
 
     def update_plot_from_rigol(self):
         addr = self.ui.combo_osc.currentData()
@@ -418,46 +441,40 @@ class MainWindow(QMainWindow):
             with open(fn, 'w', newline='') as f:
                 w = csv.writer(f)
                 w.writerow(["Time", "Voltage"])
-                for x, y in zip(self.x_data, self.y_data):
-                    w.writerow([f"{x:.10e}", f"{y:.10e}"])
-            self.log_msg("Eksportuota sėkmingai.")
+                for x, y in zip(self.x_data, self.y_data): w.writerow([f"{x:.10e}", f"{y:.10e}"])
 
     def save_rigol_screenshot(self):
         addr = self.ui.combo_osc.currentData()
-        if not addr: return self.log_msg("Klaida.")
+        if not addr: return
         was_streaming = self.timer.isActive()
         if was_streaming: self.timer.stop()
         fn, _ = QFileDialog.getSaveFileName(self, "Išsaugoti ekrano nuotrauką", "rigol_screen.png", "PNG (*.png)")
         if fn:
             try:
                 osc = RigolMSO(addr)
-                img_data = osc.get_screenshot()
-                osc.close()
+                img_data = osc.get_screenshot(); osc.close()
                 with open(fn, "wb") as f: f.write(img_data)
-                self.log_msg(f"Nuotrauka sėkmingai išsaugota: {fn}")
             except Exception as e: self.log_msg(f"Klaida: {e}")
         if was_streaming: self.timer.start(500)
 
     def fetch_tti(self, mode):
         port = self.ui.combo_tti.currentData()
-        if not port: return self.log_msg("Klaida.")
+        if not port: return
         try:
             tti = TTi1604(port)
             val = tti.get_voltage() if mode == "V" else tti.get_current()
             unit = "V" if mode == "V" else "A"
             tti.close()
             if val is not None: self.ui.lbl_tti_res.setText(f"Reikšmė: {self.format_eng(val, unit)}")
-            else: self.ui.lbl_tti_res.setText("Reikšmė: Klaida")
         except Exception as e: self.log_msg(f"Klaida: {e}")
 
     def fetch_escort(self, mode):
         port = self.ui.combo_escort.currentData()
-        if not port: return self.log_msg("Klaida.")
+        if not port: return
         try:
             escort = Escort3136A(port)
             val = escort.get_voltage_dc() if mode == "V" else escort.get_current_dc()
             unit = "V" if mode == "V" else "A"
             escort.close()
             if val is not None: self.ui.lbl_escort_res.setText(f"Reikšmė: {self.format_eng(val, unit)}")
-            else: self.ui.lbl_escort_res.setText("Reikšmė: Klaida")
         except Exception as e: self.log_msg(f"Klaida: {e}")

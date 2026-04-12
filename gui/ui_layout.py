@@ -2,12 +2,12 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QDoubleSpinBox, QFormLayout, QComboBox, 
                              QTextEdit, QTabWidget, QGroupBox, QGridLayout, 
-                             QProgressBar, QSpinBox)
+                             QProgressBar, QSpinBox, QLineEdit)
 
 class Ui_MainWindow:
     def setup_ui(self, MainWindow):
         MainWindow.setWindowTitle("Automatizuota Matavimų Sistema")
-        MainWindow.resize(1200, 850)
+        MainWindow.resize(1200, 900)
 
         central_widget = QWidget()
         MainWindow.setCentralWidget(central_widget)
@@ -53,7 +53,6 @@ class Ui_MainWindow:
         gen_layout.addRow("Fazė:", self.phase_in)
         gen_layout.addRow("Darbo ciklas:", self.duty_in)
         gen_layout.addRow("Simetrija:", self.sym_in)
-        
         self.btn_apply_gen = QPushButton("Nustatyti Generatorių")
         self.btn_apply_gen.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold;")
         gen_layout.addRow(self.btn_apply_gen)
@@ -82,7 +81,7 @@ class Ui_MainWindow:
         meas_group.setLayout(meas_grid)
         osc_layout.addLayout(ctrl_layout); osc_layout.addWidget(meas_group); osc_layout.addStretch()
 
-        # --- TAB 3: TTi 1604 Multimetras ---
+        # --- TAB 3: TTi ---
         tti_tab = QWidget()
         tti_layout = QVBoxLayout(tti_tab)
         self.btn_tti_v = QPushButton("Matuoti Įtampą (V)")
@@ -91,7 +90,7 @@ class Ui_MainWindow:
         self.lbl_tti_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
         tti_layout.addWidget(self.btn_tti_v); tti_layout.addWidget(self.btn_tti_a); tti_layout.addWidget(self.lbl_tti_res); tti_layout.addStretch()
         
-        # --- TAB 4: Escort 3136A Multimetras ---
+        # --- TAB 4: Escort ---
         escort_tab = QWidget()
         escort_layout = QVBoxLayout(escort_tab)
         self.btn_escort_v = QPushButton("Matuoti Įtampą (V)")
@@ -100,7 +99,7 @@ class Ui_MainWindow:
         self.lbl_escort_res.setStyleSheet("font-weight: bold; font-size: 16px; color: #FF9800;")
         escort_layout.addWidget(self.btn_escort_v); escort_layout.addWidget(self.btn_escort_a); escort_layout.addWidget(self.lbl_escort_res); escort_layout.addStretch()
 
-        # --- TAB 5: Bode Plot (Automatizacija) ---
+        # --- TAB 5: Bode Plot ---
         bode_tab = QWidget()
         bode_layout = QVBoxLayout(bode_tab)
         bode_settings = QFormLayout()
@@ -151,20 +150,12 @@ class Ui_MainWindow:
         fft_layout = QVBoxLayout(fft_tab)
         self.btn_calc_fft = QPushButton("Nuskaityti signalą ir skaičiuoti FFT")
         self.btn_calc_fft.setStyleSheet("background-color: #00BCD4; color: white; font-weight: bold; padding: 8px;")
-        
         self.lbl_fft_peak = QLabel("Pagrindinė harmonika (Pikas): - Hz")
         self.lbl_fft_peak.setStyleSheet("font-weight: bold; font-size: 16px; color: #00BCD4;")
-        
         self.fft_graph = pg.PlotWidget(title="Dažnių spektras (FFT)")
-        self.fft_graph.setLabel('left', 'Amplitudė', units='V')
-        self.fft_graph.setLabel('bottom', 'Dažnis', units='Hz')
-        self.fft_graph.showGrid(x=True, y=True)
-        
-        fft_layout.addWidget(self.btn_calc_fft)
-        fft_layout.addWidget(self.lbl_fft_peak)
-        fft_layout.addWidget(self.fft_graph)
+        self.fft_graph.setLabel('left', 'Amplitudė', units='V'); self.fft_graph.setLabel('bottom', 'Dažnis', units='Hz'); self.fft_graph.showGrid(x=True, y=True)
+        fft_layout.addWidget(self.btn_calc_fft); fft_layout.addWidget(self.lbl_fft_peak); fft_layout.addWidget(self.fft_graph)
 
-        # Add tabs
         tabs.addTab(gen_tab, "Generatorius (SDG)")
         tabs.addTab(osc_tab, "Oscilografas (MSO)")
         tabs.addTab(tti_tab, "Multimetras 1 (TTi)")
@@ -172,6 +163,17 @@ class Ui_MainWindow:
         tabs.addTab(bode_tab, "Bode Plot (Auto)")
         tabs.addTab(log_tab, "Data Logger")
         tabs.addTab(fft_tab, "Spektrinė Analizė (FFT)")
+
+        # --- PDF ir Bendras valdymas ---
+        pdf_group = QGroupBox("Ataskaitų Generavimas")
+        pdf_layout = QFormLayout()
+        self.input_serial = QLineEdit()
+        self.input_serial.setPlaceholderText("Pvz.: DUT-12345")
+        self.btn_generate_pdf = QPushButton("Generuoti PDF Protokolą")
+        self.btn_generate_pdf.setStyleSheet("background-color: #3F51B5; color: white; font-weight: bold; padding: 5px;")
+        pdf_layout.addRow("Serijos Nr.:", self.input_serial)
+        pdf_layout.addRow(self.btn_generate_pdf)
+        pdf_group.setLayout(pdf_layout)
 
         self.btn_start_stream = QPushButton("Pradėti gyvą rodymą (Oscilografas)")
         self.btn_stop_stream = QPushButton("Stabdyti gyvą rodymą")
@@ -181,10 +183,11 @@ class Ui_MainWindow:
 
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setMinimumHeight(150)
+        self.log_console.setMinimumHeight(120)
         self.log_console.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: Consolas;")
 
         left_panel.addWidget(conn_group)
+        left_panel.addWidget(pdf_group)
         left_panel.addWidget(tabs)
         left_panel.addWidget(self.btn_start_stream)
         left_panel.addWidget(self.btn_stop_stream)
