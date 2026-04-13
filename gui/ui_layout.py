@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QProgressBar, QSpinBox, QLineEdit)
 
 class Ui_MainWindow:
+    """Klasė atsakinga išskirtinai tik už grafinės sąsajos elementų išdėstymą."""
     def setup_ui(self, MainWindow):
         MainWindow.setWindowTitle("Automatizuota Matavimų Sistema")
         MainWindow.resize(1200, 900)
@@ -15,6 +16,7 @@ class Ui_MainWindow:
 
         left_panel = QVBoxLayout()
         
+        # --- Ryšio skydelis ---
         conn_group = QGroupBox("Aparatūros Ryšys")
         conn_layout = QFormLayout()
         self.btn_scan = QPushButton("Skenuoti VISA ir COM")
@@ -54,6 +56,7 @@ class Ui_MainWindow:
         gen_layout.addRow("Darbo ciklas:", self.duty_in)
         gen_layout.addRow("Simetrija:", self.sym_in)
         self.btn_apply_gen = QPushButton("Nustatyti Generatorių")
+        self.btn_apply_gen.setObjectName("btn_apply_gen")
         self.btn_apply_gen.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold;")
         gen_layout.addRow(self.btn_apply_gen)
 
@@ -164,7 +167,7 @@ class Ui_MainWindow:
         tabs.addTab(log_tab, "Data Logger")
         tabs.addTab(fft_tab, "Spektrinė Analizė (FFT)")
 
-        # --- PDF ir Bendras valdymas ---
+        # --- Ataskaitos ir Konsolė ---
         pdf_group = QGroupBox("Ataskaitų Generavimas")
         pdf_layout = QFormLayout()
         self.input_serial = QLineEdit()
@@ -176,7 +179,9 @@ class Ui_MainWindow:
         pdf_group.setLayout(pdf_layout)
 
         self.btn_start_stream = QPushButton("Pradėti gyvą rodymą (Oscilografas)")
+        self.btn_start_stream.setObjectName("btn_start_stream")
         self.btn_stop_stream = QPushButton("Stabdyti gyvą rodymą")
+        self.btn_stop_stream.setObjectName("btn_stop_stream")
         self.btn_export = QPushButton("Eksportuoti CSV")
         self.btn_start_stream.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.btn_stop_stream.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
