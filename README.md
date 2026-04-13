@@ -36,7 +36,7 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-`(Jei naudojate CMD: .\venv\Scripts\activate.bat)`
+(Jei naudojate CMD: `.\venv\Scripts\activate.bat`)
 
 3. Įdiekite reikiamas bibliotekas:
 ```bash
