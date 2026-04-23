@@ -2,10 +2,6 @@ from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import Qt
 
 def apply_dark_theme(app):
-    """
-    Pritaiko globalią plokščią (flat) tamsią temą visai PyQt6 aplikacijai
-    naudojant bazinę QPalette ir globalų StyleSheet.
-    """
     app.setStyle("Fusion")
     
     dark_palette = QPalette()
@@ -30,6 +26,7 @@ def apply_dark_theme(app):
     app.setStyleSheet("""
         QWidget { background-color: transparent; }
         QMainWindow { background-color: rgb(25, 25, 25); }
+        QSplitter::handle { background-color: rgb(60, 60, 60); width: 2px; }
         QGroupBox {
             border: 1px solid rgb(60, 60, 60);
             background-color: rgb(35, 35, 35);
@@ -54,12 +51,14 @@ def apply_dark_theme(app):
             border-bottom: none;
             border-top-left-radius: 3px;
             border-top-right-radius: 3px;
-            padding: 5px 12px;
+            padding: 8px 12px;
             margin-right: 1px;
         }
         QTabBar::tab:selected {
-            background-color: rgb(35, 35, 35);
-            border-bottom: 1px solid rgb(35, 35, 35);
+            background-color: rgb(25, 25, 25);
+            border-top: 3px solid rgb(42, 130, 218);
+            border-bottom: 1px solid rgb(25, 25, 25);
+            font-weight: bold;
         }
         QComboBox, QDoubleSpinBox, QSpinBox, QLineEdit, QListWidget {
             border: 1px solid rgb(60, 60, 60);
@@ -71,11 +70,16 @@ def apply_dark_theme(app):
         QPushButton {
             background-color: rgb(50, 50, 50);
             color: white;
-            border: none;
-            padding: 5px 15px;
+            border: 1px solid rgb(70, 70, 70);
+            padding: 6px 15px;
             border-radius: 3px;
         }
         QPushButton:hover { background-color: rgb(65, 65, 65); }
-        QPushButton:pressed { background-color: rgb(40, 40, 40); }
-        #btn_apply_gen, #btn_start_stream, #btn_stop_stream { border: none; }
+        QPushButton:pressed { background-color: rgb(30, 30, 30); }
+        QPushButton:checked {
+            background-color: rgb(46, 125, 50);
+            border: 1px solid rgb(27, 94, 32);
+            color: white;
+            font-weight: bold;
+        }
     """)
