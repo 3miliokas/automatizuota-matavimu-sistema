@@ -5,10 +5,10 @@ def apply_dark_theme(app):
     app.setStyle("Fusion")
     
     dark_palette = QPalette()
-    dark_palette.setColor(QPalette.ColorRole.Window, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.ColorRole.Window, QColor(35, 35, 35))
     dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-    dark_palette.setColor(QPalette.ColorRole.Base, QColor(15, 15, 15))
-    dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(35, 35, 35))
     dark_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
     dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
     dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
@@ -16,29 +16,23 @@ def apply_dark_theme(app):
     dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
     dark_palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
     dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-    
-    highlight_color = QColor(42, 130, 218)
-    dark_palette.setColor(QPalette.ColorRole.Highlight, highlight_color)
-    dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.white)
-    
     app.setPalette(dark_palette)
-    
-    app.setStyleSheet("""
-        QWidget { background-color: transparent; }
-        QMainWindow { background-color: rgb(25, 25, 25); }
-        QSplitter::handle { background-color: rgb(60, 60, 60); width: 2px; }
+
+    flat_css = """
+        QWidget {
+            font-size: 12px;
+        }
         QGroupBox {
             border: 1px solid rgb(60, 60, 60);
-            background-color: rgb(35, 35, 35);
-            border-radius: 3px;
-            margin-top: 1ex;
-            font-weight: bold;
+            margin-top: 10px;
+            padding-top: 10px;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            padding: 0 5px;
-            color: white;
+            padding: 0 3px;
+            color: #2A82DA;
+            font-weight: bold;
         }
         QTabWidget::pane {
             border: 1px solid rgb(60, 60, 60);
@@ -49,37 +43,49 @@ def apply_dark_theme(app):
             color: white;
             border: 1px solid rgb(60, 60, 60);
             border-bottom: none;
-            border-top-left-radius: 3px;
-            border-top-right-radius: 3px;
-            padding: 8px 12px;
+            padding: 6px 10px;
             margin-right: 1px;
+            border-radius: 0px;
         }
         QTabBar::tab:selected {
             background-color: rgb(25, 25, 25);
-            border-top: 3px solid rgb(42, 130, 218);
-            border-bottom: 1px solid rgb(25, 25, 25);
+            border-top: 2px solid rgb(42, 130, 218);
             font-weight: bold;
         }
-        QComboBox, QDoubleSpinBox, QSpinBox, QLineEdit, QListWidget {
+        QComboBox, QDoubleSpinBox, QSpinBox, QLineEdit, QListWidget, QTableWidget {
             border: 1px solid rgb(60, 60, 60);
             background-color: rgb(15, 15, 15);
             color: white;
-            padding: 3px;
-            selection-background-color: rgb(42, 130, 218);
+            padding: 2px;
+            border-radius: 0px;
+            selection-background-color: rgb(156, 39, 176);
+        }
+        QListView {
+            background-color: rgb(25, 25, 25);
+            color: white;
+            outline: 0;
+            border: 1px solid rgb(60, 60, 60);
+        }
+        QListView::item:selected, QListView::item:hover {
+            background-color: rgb(156, 39, 176);
+            color: white;
+        }
+        QTableView::item:selected {
+            background-color: rgb(156, 39, 176);
+            color: white;
         }
         QPushButton {
-            background-color: rgb(50, 50, 50);
-            color: white;
-            border: 1px solid rgb(70, 70, 70);
-            padding: 6px 15px;
-            border-radius: 3px;
+            border-radius: 0px;
+            border: 1px solid rgb(60, 60, 60);
         }
-        QPushButton:hover { background-color: rgb(65, 65, 65); }
-        QPushButton:pressed { background-color: rgb(30, 30, 30); }
-        QPushButton:checked {
-            background-color: rgb(46, 125, 50);
-            border: 1px solid rgb(27, 94, 32);
-            color: white;
-            font-weight: bold;
-        }
-    """)
+    """
+    app.setStyleSheet(flat_css)
+
+STYLE_PRIMARY = "QPushButton { background-color: #2980B9; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #3498DB; }"
+STYLE_SUCCESS = "QPushButton { background-color: #27AE60; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #2ECC71; }"
+STYLE_DANGER = "QPushButton { background-color: #C0392B; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #E74C3C; }"
+STYLE_NORMAL = "QPushButton { background-color: #454545; color: white; padding: 6px; border: 1px solid #555; } QPushButton:hover { background-color: #555; }"
+STYLE_ACTIVE = "QPushButton { background-color: #27AE60; color: white; font-weight: bold; padding: 6px; border: none; }"
+STYLE_EXPORT = "QPushButton { background-color: #8E44AD; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #9B59B6; }"
+STYLE_LCD_DC = "font-size: 24px; font-weight: bold; color: #4CAF50; background: black; padding: 5px; border: 1px solid #333; text-align: center;"
+STYLE_LCD_AC = "font-size: 24px; font-weight: bold; color: #FFA500; background: black; padding: 5px; border: 1px solid #333; text-align: center;"

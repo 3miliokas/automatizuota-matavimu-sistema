@@ -18,4 +18,12 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == "__main__":
-    main()
+    import sys
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme import apply_dark_theme
+    
+    app = QApplication(sys.argv)
+    apply_dark_theme(app)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())

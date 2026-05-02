@@ -2,323 +2,299 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QDoubleSpinBox, QFormLayout, QComboBox, 
                              QTextEdit, QTabWidget, QGroupBox, QGridLayout, 
-                             QProgressBar, QSpinBox, QLineEdit, QSplitter,
-                             QScrollArea, QFrame, QHeaderView, QTableWidget)
+                             QProgressBar, QSpinBox, QLineEdit, QSplitter, 
+                             QHeaderView, QTableWidget, QAbstractItemView)
 from PyQt6.QtCore import Qt
+from gui.theme import *
 
 class Ui_MainWindow:
     def setup_ui(self, MainWindow):
         MainWindow.setWindowTitle("Automatizuota Matavimų Sistema")
-        MainWindow.resize(1400, 900)
+        MainWindow.resize(1450, 950)
 
         central_widget = QWidget()
         MainWindow.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
-
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(self.splitter)
 
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setMinimumWidth(450)
-        scroll_area.setMaximumWidth(600)
-        
-        container = QWidget()
-        left_layout = QVBoxLayout(container)
+        # --- KAIRĖ: Valdymas ---
+        left_container = QWidget()
+        left_v_layout = QVBoxLayout(left_container)
+        left_v_layout.setContentsMargins(0, 0, 0, 0)
+        left_v_layout.setSpacing(5)
 
-        conn_group = QGroupBox("Bendra Informacija")
-        conn_layout = QFormLayout(conn_group)
+        # 1. Bendra Informacija (Ryšys)
+        self.conn_group = QGroupBox("Bendra Informacija (Ryšys)")
+        conn_layout = QFormLayout(self.conn_group)
+        conn_layout.setContentsMargins(5, 10, 5, 5)
+        conn_layout.setSpacing(5)
+        
         self.btn_scan = QPushButton("Skenuoti VISA ir COM")
-        self.combo_gen = QComboBox(); self.combo_osc = QComboBox()
-        self.combo_tti = QComboBox(); self.combo_escort = QComboBox()
-        self.input_serial = QLineEdit(); self.input_serial.setPlaceholderText("Pvz.: DUT-12345")
-        self.btn_generate_pdf = QPushButton("Generuoti PDF Protokolą")
-        
-        style_indigo = "QPushButton {background-color: #3F51B5; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #5C6BC0;} QPushButton:pressed {background-color: #283593;}"
-        style_purple = "QPushButton {background-color: #9C27B0; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #AB47BC;} QPushButton:pressed {background-color: #7B1FA2;}"
-        style_blue = "QPushButton {background-color: #2196F3; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #42A5F5;} QPushButton:pressed {background-color: #1976D2;}"
-        style_green = "QPushButton {background-color: #4CAF50; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #66BB6A;} QPushButton:pressed {background-color: #388E3C;}"
-        style_red = "QPushButton {background-color: #F44336; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #EF5350;} QPushButton:pressed {background-color: #D32F2F;}"
-        style_gray = "QPushButton {background-color: #607D8B; color: white; border: none; font-weight: bold; padding: 6px; border-radius: 3px;} QPushButton:hover {background-color: #78909C;} QPushButton:pressed {background-color: #455A64;}"
-        
-        style_toggle = """
-            QPushButton {background-color: #455A64; color: white; border: none; font-weight: bold; padding: 8px; border-radius: 3px;}
-            QPushButton:hover {background-color: #546E7A;}
-            QPushButton:checked {background-color: #4CAF50;}
-            QPushButton:checked:hover {background-color: #66BB6A;}
-        """
-        
-        self.btn_scan.setStyleSheet(style_indigo)
-        self.btn_generate_pdf.setStyleSheet(style_indigo)
+        self.btn_scan.setStyleSheet(STYLE_PRIMARY)
+        self.combo_gen = QComboBox()
+        self.combo_osc = QComboBox()
+        self.combo_tti = QComboBox()
+        self.combo_escort = QComboBox()
+        self.input_serial = QLineEdit()
+        self.btn_generate_pdf = QPushButton("Generuoti PDF")
+        self.btn_generate_pdf.setStyleSheet(STYLE_EXPORT)
         
         conn_layout.addRow(self.btn_scan)
-        conn_layout.addRow("Gen (SDG):", self.combo_gen)
-        conn_layout.addRow("Osc (MSO):", self.combo_osc)
-        conn_layout.addRow("TTi (COM):", self.combo_tti)
-        conn_layout.addRow("Escort (COM):", self.combo_escort)
+        conn_layout.addRow("Generatorius:", self.combo_gen)
+        conn_layout.addRow("Oscilografas:", self.combo_osc)
+        conn_layout.addRow("TTi 1604:", self.combo_tti)
+        conn_layout.addRow("Escort 3136A:", self.combo_escort)
         conn_layout.addRow("Serijos Nr.:", self.input_serial)
         conn_layout.addRow(self.btn_generate_pdf)
-        left_layout.addWidget(conn_group)
+        left_v_layout.addWidget(self.conn_group)
 
-        self.ctrl_tabs = QTabWidget()
+        # 2. Instrumentų Tabai
+        self.left_tabs = QTabWidget()
+
+        # [TAB] Generatorius
+        tab_gen = QWidget(); gen_l = QVBoxLayout(tab_gen); gen_l.setContentsMargins(5, 5, 5, 5)
+        grid_g = QGridLayout(); grid_g.setSpacing(5)
         
-        # 1. Generatorius
-        gen_tab = QWidget(); gen_layout = QFormLayout(gen_tab)
         self.gen_ch_select = QComboBox(); self.gen_ch_select.addItems(["CH1", "CH2"])
         self.wave_type = QComboBox(); self.wave_type.addItems(["Sine", "Square", "Ramp", "Pulse", "Noise", "Arb"])
+        self.combo_freq_type = QComboBox(); self.combo_freq_type.addItems(["Dažnis (Freq)", "Periodas (Period)"])
+        self.freq_in = QDoubleSpinBox(); self.freq_in.setRange(0, 1e8); self.freq_in.setValue(1000)
+        self.freq_unit = QComboBox(); self.freq_unit.addItems(["Hz", "kHz", "MHz"])
         
-        self.freq_in = QDoubleSpinBox(); self.freq_in.setRange(0.001, 999.0); self.freq_in.setValue(10.0); self.freq_in.setDecimals(3)
-        self.freq_unit = QComboBox(); self.freq_unit.addItems(["Hz", "kHz", "MHz"]); self.freq_unit.setCurrentText("kHz")
-        f_box = QHBoxLayout(); f_box.addWidget(self.freq_in); f_box.addWidget(self.freq_unit); f_box.setContentsMargins(0,0,0,0)
-        f_widget = QWidget(); f_widget.setLayout(f_box)
-        
-        self.amp_in = QDoubleSpinBox(); self.amp_in.setRange(0.002, 20.0); self.amp_in.setValue(1.0); self.amp_in.setSuffix(" Vpp")
-        self.offset_in = QDoubleSpinBox(); self.offset_in.setRange(-10.0, 10.0); self.offset_in.setSuffix(" Vdc")
-        
-        self.phase_in = QDoubleSpinBox(); self.phase_in.setRange(0, 360); self.phase_in.setDecimals(1); self.phase_in.setSingleStep(0.1); self.phase_in.setSuffix(" °")
-        self.duty_in = QDoubleSpinBox(); self.duty_in.setRange(0.1, 99.9); self.duty_in.setDecimals(1); self.duty_in.setSingleStep(0.1); self.duty_in.setValue(50.0); self.duty_in.setSuffix(" %")
-        self.sym_in = QDoubleSpinBox(); self.sym_in.setRange(0.0, 100.0); self.sym_in.setDecimals(1); self.sym_in.setSingleStep(0.1); self.sym_in.setValue(50.0); self.sym_in.setSuffix(" %")
-        
-        self.btn_apply_gen = QPushButton("Siųsti parametrus")
-        self.btn_apply_gen.setStyleSheet(style_purple)
-        
-        ch_toggle_layout = QHBoxLayout()
-        self.btn_gen_ch1 = QPushButton("CH1 Išėjimas"); self.btn_gen_ch1.setCheckable(True); self.btn_gen_ch1.setStyleSheet(style_toggle)
-        self.btn_gen_ch2 = QPushButton("CH2 Išėjimas"); self.btn_gen_ch2.setCheckable(True); self.btn_gen_ch2.setStyleSheet(style_toggle)
-        ch_toggle_layout.addWidget(self.btn_gen_ch1); ch_toggle_layout.addWidget(self.btn_gen_ch2)
+        self.f_widget = QWidget(); l_f = QHBoxLayout(self.f_widget); l_f.setContentsMargins(0,0,0,0); l_f.addWidget(self.freq_in); l_f.addWidget(self.freq_unit)
 
-        gen_layout.addRow("Konfigūruoti:", self.gen_ch_select)
-        gen_layout.addRow("Tipas:", self.wave_type)
-        gen_layout.addRow("Dažnis:", f_widget)
-        gen_layout.addRow("Amplitudė:", self.amp_in)
-        gen_layout.addRow("Poslinkis:", self.offset_in)
-        gen_layout.addRow("Fazė:", self.phase_in)
-        gen_layout.addRow("Darbo ciklas (Duty):", self.duty_in)
-        gen_layout.addRow("Simetrija (Sym):", self.sym_in)
-        gen_layout.addRow(self.btn_apply_gen)
-        gen_layout.addRow(ch_toggle_layout)
-        self.ctrl_tabs.addTab(gen_tab, "Gen")
+        self.combo_amp_type = QComboBox(); self.combo_amp_type.addItems(["Amplitudė/Poslinkis", "High/Low Level"])
+        self.amp_in = QDoubleSpinBox(); self.amp_in.setRange(-10, 10); self.amp_in.setValue(4)
+        self.offset_in = QDoubleSpinBox(); self.offset_in.setRange(-10, 10)
+        self.phase_in = QDoubleSpinBox(); self.phase_in.setRange(0, 360)
+        self.duty_in = QDoubleSpinBox(); self.duty_in.setRange(0.001, 99.999); self.duty_in.setValue(50)
+        self.sym_in = QDoubleSpinBox(); self.sym_in.setRange(0, 100); self.sym_in.setValue(50)
+        self.delay_in = QDoubleSpinBox(); self.delay_in.setRange(0, 1000); self.delay_in.setDecimals(9)
+        self.stdev_in = QDoubleSpinBox(); self.stdev_in.setRange(0, 10); self.stdev_in.setDecimals(3)
+        self.mean_in = QDoubleSpinBox(); self.mean_in.setRange(-10, 10); self.mean_in.setDecimals(3)
 
-        # 2. Oscilografas
-        osc_tab = QWidget(); osc_layout = QVBoxLayout(osc_tab)
-        osc_ch_grid = QGridLayout()
-        self.btn_osc_ch1 = QPushButton("CH1"); self.btn_osc_ch1.setCheckable(True); self.btn_osc_ch1.setStyleSheet(style_toggle)
-        self.btn_osc_ch2 = QPushButton("CH2"); self.btn_osc_ch2.setCheckable(True); self.btn_osc_ch2.setStyleSheet(style_toggle)
-        self.btn_osc_ch3 = QPushButton("CH3"); self.btn_osc_ch3.setCheckable(True); self.btn_osc_ch3.setStyleSheet(style_toggle)
-        self.btn_osc_ch4 = QPushButton("CH4"); self.btn_osc_ch4.setCheckable(True); self.btn_osc_ch4.setStyleSheet(style_toggle)
-        osc_ch_grid.addWidget(self.btn_osc_ch1, 0, 0); osc_ch_grid.addWidget(self.btn_osc_ch2, 0, 1)
-        osc_ch_grid.addWidget(self.btn_osc_ch3, 1, 0); osc_ch_grid.addWidget(self.btn_osc_ch4, 1, 1)
+        grid_g.addWidget(QLabel("Kanalas:"), 0, 0); grid_g.addWidget(self.gen_ch_select, 0, 1)
+        grid_g.addWidget(QLabel("Forma:"), 1, 0); grid_g.addWidget(self.wave_type, 1, 1)
+        grid_g.addWidget(self.combo_freq_type, 2, 0); grid_g.addWidget(self.f_widget, 2, 1)
+        grid_g.addWidget(self.combo_amp_type, 3, 0); grid_g.addWidget(self.amp_in, 3, 1)
+        grid_g.addWidget(QLabel("Poslinkis:"), 4, 0); grid_g.addWidget(self.offset_in, 4, 1)
+        grid_g.addWidget(QLabel("Fazė (°):"), 5, 0); grid_g.addWidget(self.phase_in, 5, 1)
+        grid_g.addWidget(QLabel("Duty (%):"), 6, 0); grid_g.addWidget(self.duty_in, 6, 1)
+        grid_g.addWidget(QLabel("Simetrija (%):"), 7, 0); grid_g.addWidget(self.sym_in, 7, 1)
+        grid_g.addWidget(QLabel("Uždelsimas (s):"), 8, 0); grid_g.addWidget(self.delay_in, 8, 1)
+        grid_g.addWidget(QLabel("St. Nuokrypis:"), 9, 0); grid_g.addWidget(self.stdev_in, 9, 1)
+        grid_g.addWidget(QLabel("Vidurkis:"), 10, 0); grid_g.addWidget(self.mean_in, 10, 1)
+
+        self.btn_apply_gen = QPushButton("Taikyti Parametrus"); self.btn_apply_gen.setStyleSheet(STYLE_SUCCESS)
+        self.btn_eqphase = QPushButton("Sync Fazę"); self.btn_eqphase.setStyleSheet(STYLE_NORMAL)
+        self.btn_gen_ch1 = QPushButton("CH1 Išvestis"); self.btn_gen_ch1.setCheckable(True); self.btn_gen_ch1.setStyleSheet(STYLE_NORMAL)
+        self.btn_gen_ch2 = QPushButton("CH2 Išvestis"); self.btn_gen_ch2.setCheckable(True); self.btn_gen_ch2.setStyleSheet(STYLE_NORMAL)
+
+        gen_l.addLayout(grid_g); gen_l.addWidget(self.btn_apply_gen); gen_l.addWidget(self.btn_eqphase)
+        h_gen = QHBoxLayout(); h_gen.addWidget(self.btn_gen_ch1); h_gen.addWidget(self.btn_gen_ch2); gen_l.addLayout(h_gen)
+        gen_l.addStretch()
+        self.left_tabs.addTab(tab_gen, "Gen")
+
+        # [TAB] Oscilografas
+        tab_osc = QWidget(); osc_l = QVBoxLayout(tab_osc); osc_l.setContentsMargins(5, 5, 5, 5)
+        self.btn_auto = QPushButton("Auto Scale"); self.btn_auto.setStyleSheet(STYLE_PRIMARY)
+        self.btn_run = QPushButton("STOP (Sustabdyta)"); self.btn_run.setCheckable(True); self.btn_run.setStyleSheet(STYLE_DANGER)
         
-        ctrl_box = QHBoxLayout()
-        self.btn_auto = QPushButton("Auto-Scale"); self.btn_run = QPushButton("Run / Stop"); self.btn_run.setCheckable(True)
-        self.btn_auto.setStyleSheet(style_blue); self.btn_run.setStyleSheet(style_toggle)
-        ctrl_box.addWidget(self.btn_auto); ctrl_box.addWidget(self.btn_run)
+        h_osc_ch = QHBoxLayout()
+        self.btn_osc_ch1 = QPushButton("CH1"); self.btn_osc_ch1.setCheckable(True); self.btn_osc_ch1.setStyleSheet(STYLE_NORMAL)
+        self.btn_osc_ch2 = QPushButton("CH2"); self.btn_osc_ch2.setCheckable(True); self.btn_osc_ch2.setStyleSheet(STYLE_NORMAL)
+        self.btn_osc_ch3 = QPushButton("CH3"); self.btn_osc_ch3.setCheckable(True); self.btn_osc_ch3.setStyleSheet(STYLE_NORMAL)
+        self.btn_osc_ch4 = QPushButton("CH4"); self.btn_osc_ch4.setCheckable(True); self.btn_osc_ch4.setStyleSheet(STYLE_NORMAL)
+        h_osc_ch.addWidget(self.btn_osc_ch1); h_osc_ch.addWidget(self.btn_osc_ch2); h_osc_ch.addWidget(self.btn_osc_ch3); h_osc_ch.addWidget(self.btn_osc_ch4)
 
-        meas_group = QGroupBox("Aparatūriniai matavimai")
-        meas_layout = QVBoxLayout(meas_group)
-        ch_sel_layout = QHBoxLayout()
-        ch_sel_layout.addWidget(QLabel("Matuoti iš:"))
         self.combo_meas_ch = QComboBox(); self.combo_meas_ch.addItems(["CH1", "CH2", "CH3", "CH4"])
-        ch_sel_layout.addWidget(self.combo_meas_ch)
-        self.btn_meas_all = QPushButton("Atnaujinti parametrus")
-        self.btn_meas_all.setStyleSheet(style_blue)
-        ch_sel_layout.addWidget(self.btn_meas_all)
-        meas_layout.addLayout(ch_sel_layout)
-
-        self.table_meas = QTableWidget(0, 2)
+        self.btn_meas_all = QPushButton("Nuskaityti Visus Parametrus"); self.btn_meas_all.setStyleSheet(STYLE_PRIMARY)
+        
+        self.table_meas = QTableWidget(18, 2)
         self.table_meas.setHorizontalHeaderLabels(["Parametras", "Reikšmė"])
         self.table_meas.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table_meas.verticalHeader().setVisible(False)
-        meas_layout.addWidget(self.table_meas)
-
-        osc_layout.addWidget(QLabel("<b>Kanalų rodymas:</b>"))
-        osc_layout.addLayout(osc_ch_grid); osc_layout.addLayout(ctrl_box)
-        osc_layout.addWidget(meas_group)
-        self.ctrl_tabs.addTab(osc_tab, "Osc")
-
-        # 3. Multimetrai
-        multi_tab = QWidget(); multi_layout = QVBoxLayout(multi_tab)
+        self.table_meas.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table_meas.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         
-        self.tti_dc_style = "font-size: 32pt; font-family: 'Consolas'; color: #00FF00; background: black; border-radius: 5px; padding: 10px;"
-        self.tti_ac_style = "font-size: 32pt; font-family: 'Consolas'; color: #FFA500; background: black; border-radius: 5px; padding: 10px;"
+        self.btn_osc_screenshot = QPushButton("Išsaugoti Ekrano Kopiją"); self.btn_osc_screenshot.setStyleSheet(STYLE_NORMAL)
+        self.btn_copy_meas = QPushButton("Kopijuoti Matavimus"); self.btn_copy_meas.setStyleSheet(STYLE_NORMAL)
+
+        h_osc_btns = QHBoxLayout()
+        h_osc_btns.addWidget(self.btn_osc_screenshot)
+        h_osc_btns.addWidget(self.btn_copy_meas)
+
+        osc_l.addWidget(self.btn_auto); osc_l.addWidget(self.btn_run); osc_l.addLayout(h_osc_ch)
+        osc_l.addWidget(QLabel("Kanalas:")); osc_l.addWidget(self.combo_meas_ch); osc_l.addWidget(self.btn_meas_all)
+        osc_l.addWidget(self.table_meas)
+        osc_l.addLayout(h_osc_btns)
         
-        tti_group = QGroupBox("TTi 1604 Nuotolinis Valdymas")
-        tti_main_layout = QVBoxLayout(tti_group)
-
-        self.lbl_tti_val = QLabel("----")
-        self.lbl_tti_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_tti_val.setStyleSheet(self.tti_dc_style)
-
-        tti_main_layout.addWidget(self.lbl_tti_val)
-
-        tti_ctrl_grid = QGridLayout()
+        self.left_tabs.addTab(tab_osc, "Osc")
         
-        self.btn_tti_operate = QPushButton("Operate"); self.btn_tti_operate.setStyleSheet(style_purple)
-        self.btn_tti_auto = QPushButton("Auto/Man"); self.btn_tti_auto.setStyleSheet(style_purple)
-        self.btn_tti_up = QPushButton("Up ▲"); self.btn_tti_up.setStyleSheet(style_purple)
-        self.btn_tti_down = QPushButton("Down ▼"); self.btn_tti_down.setStyleSheet(style_purple)
-
-        self.btn_tti_v = QPushButton("V"); self.btn_tti_v.setStyleSheet(style_gray)
-        self.btn_tti_a = QPushButton("A"); self.btn_tti_a.setStyleSheet(style_gray)
-        self.btn_tti_ma = QPushButton("mA"); self.btn_tti_ma.setStyleSheet(style_gray)
-        self.btn_tti_mv = QPushButton("mV"); self.btn_tti_mv.setStyleSheet(style_gray)
-        self.btn_tti_dc = QPushButton("DC"); self.btn_tti_dc.setStyleSheet(style_gray)
-        self.btn_tti_ac = QPushButton("AC"); self.btn_tti_ac.setStyleSheet(style_gray)
-        self.btn_tti_ohm = QPushButton("Ohm"); self.btn_tti_ohm.setStyleSheet(style_gray)
-        self.btn_tti_hz = QPushButton("Hz"); self.btn_tti_hz.setStyleSheet(style_gray)
-
-        self.btn_tti_diode = QPushButton("Diode"); self.btn_tti_diode.setStyleSheet(style_indigo)
-        self.btn_tti_minmax = QPushButton("Min-Max"); self.btn_tti_minmax.setStyleSheet(style_indigo)
-        self.btn_tti_hold = QPushButton("Hold"); self.btn_tti_hold.setStyleSheet(style_indigo)
-        self.btn_tti_thold = QPushButton("T-Hold"); self.btn_tti_thold.setStyleSheet(style_indigo)
-        self.btn_tti_null = QPushButton("Null"); self.btn_tti_null.setStyleSheet(style_indigo)
-        self.btn_tti_reset = QPushButton("Reset"); self.btn_tti_reset.setStyleSheet(style_indigo)
-        self.btn_tti_cont = QPushButton("Cont"); self.btn_tti_cont.setStyleSheet(style_indigo)
-        self.btn_tti_review = QPushButton("Review"); self.btn_tti_review.setStyleSheet(style_indigo)
-
-        self.btn_tti_refresh = QPushButton("NUSKAITYTI EKRANĄ")
-        self.btn_tti_refresh.setStyleSheet(style_blue)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_operate, 0, 0)
-        tti_ctrl_grid.addWidget(self.btn_tti_auto, 0, 1)
-        tti_ctrl_grid.addWidget(self.btn_tti_up, 0, 2)
-        tti_ctrl_grid.addWidget(self.btn_tti_down, 0, 3)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_v, 1, 0)
-        tti_ctrl_grid.addWidget(self.btn_tti_a, 1, 1)
-        tti_ctrl_grid.addWidget(self.btn_tti_ma, 1, 2)
-        tti_ctrl_grid.addWidget(self.btn_tti_mv, 1, 3)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_diode, 2, 0)
-        tti_ctrl_grid.addWidget(self.btn_tti_minmax, 2, 1)
-        tti_ctrl_grid.addWidget(self.btn_tti_hold, 2, 2)
-        tti_ctrl_grid.addWidget(self.btn_tti_thold, 2, 3)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_dc, 3, 0)
-        tti_ctrl_grid.addWidget(self.btn_tti_ac, 3, 1)
-        tti_ctrl_grid.addWidget(self.btn_tti_ohm, 3, 2)
-        tti_ctrl_grid.addWidget(self.btn_tti_hz, 3, 3)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_null, 4, 0)
-        tti_ctrl_grid.addWidget(self.btn_tti_reset, 4, 1)
-        tti_ctrl_grid.addWidget(self.btn_tti_cont, 4, 2)
-        tti_ctrl_grid.addWidget(self.btn_tti_review, 4, 3)
-
-        tti_ctrl_grid.addWidget(self.btn_tti_refresh, 5, 0, 1, 4)
-
-        tti_main_layout.addLayout(tti_ctrl_grid)
-        multi_layout.addWidget(tti_group)
+        # [TAB] TTi 1604
+        tab_tti = QWidget(); tti_l = QVBoxLayout(tab_tti); tti_l.setContentsMargins(5, 5, 5, 5)
+        self.lbl_tti_val = QLabel("---"); self.lbl_tti_val.setStyleSheet(STYLE_LCD_DC)
+        self.lbl_tti_val.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
-        esc_group = QGroupBox("Escort 3136A Valdymas")
-        esc_layout = QVBoxLayout(esc_group)
-        
-        self.lbl_esc_val = QLabel("----")
-        self.lbl_esc_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_esc_val.setStyleSheet(self.tti_dc_style) 
-        
-        self.btn_esc_read = QPushButton("NUSKAITYTI EKRANĄ")
-        self.btn_esc_read.setStyleSheet(style_blue)
-        
-        esc_layout.addWidget(self.lbl_esc_val)
-        esc_layout.addWidget(self.btn_esc_read)
+        t_grid1 = QGridLayout(); t_grid1.setSpacing(2)
+        self.btn_tti_operate = QPushButton("OPERATE"); self.btn_tti_operate.setStyleSheet(STYLE_NORMAL)
+        self.btn_tti_up = QPushButton("UP ▲"); self.btn_tti_up.setStyleSheet(STYLE_NORMAL)
+        self.btn_tti_down = QPushButton("DOWN ▼"); self.btn_tti_down.setStyleSheet(STYLE_NORMAL)
+        self.btn_tti_auto = QPushButton("AUTO"); self.btn_tti_auto.setStyleSheet(STYLE_NORMAL)
+        t_grid1.addWidget(self.btn_tti_operate, 0, 0, 1, 2)
+        t_grid1.addWidget(self.btn_tti_up, 1, 0); t_grid1.addWidget(self.btn_tti_down, 1, 1); t_grid1.addWidget(self.btn_tti_auto, 2, 0, 1, 2)
 
-        multi_layout.addWidget(esc_group); multi_layout.addStretch()
-        self.ctrl_tabs.addTab(multi_tab, "Multi")
-
-        # 4. Bode Plot
-        bode_tab = QWidget(); bode_layout = QFormLayout(bode_tab)
-        self.bode_start_f = QDoubleSpinBox(); self.bode_start_f.setRange(1, 1e8); self.bode_start_f.setValue(10); self.bode_start_f.setSuffix(" Hz")
-        self.bode_stop_f = QDoubleSpinBox(); self.bode_stop_f.setRange(10, 1e8); self.bode_stop_f.setValue(10000); self.bode_stop_f.setSuffix(" Hz")
-        self.bode_points = QSpinBox(); self.bode_points.setRange(2, 10000); self.bode_points.setValue(50)
-        self.bode_amp = QDoubleSpinBox(); self.bode_amp.setRange(0.01, 20.0); self.bode_amp.setValue(1.0); self.bode_amp.setSuffix(" Vpp")
+        t_grid2 = QGridLayout(); t_grid2.setSpacing(2)
+        self.btn_tti_v = QPushButton("V"); self.btn_tti_a = QPushButton("A"); self.btn_tti_ma = QPushButton("mA"); self.btn_tti_mv = QPushButton("mV")
+        self.btn_tti_dc = QPushButton("DC"); self.btn_tti_ac = QPushButton("AC"); self.btn_tti_ohm = QPushButton("OHM"); self.btn_tti_hz = QPushButton("Hz")
         
+        self.btn_tti_diode = QPushButton("Diode"); self.btn_tti_cont = QPushButton("Continuity")
+        self.btn_tti_null = QPushButton("NULL (Set Zero)"); self.btn_tti_null.setCheckable(True)
+        self.btn_tti_reset = QPushButton("RESET")
+
+        for btn in [self.btn_tti_v, self.btn_tti_a, self.btn_tti_ma, self.btn_tti_mv, self.btn_tti_dc, self.btn_tti_ac, self.btn_tti_ohm, self.btn_tti_hz, self.btn_tti_diode, self.btn_tti_cont, self.btn_tti_null, self.btn_tti_reset]:
+            btn.setStyleSheet(STYLE_NORMAL)
+            
+        t_grid2.addWidget(self.btn_tti_v, 0, 0); t_grid2.addWidget(self.btn_tti_a, 0, 1); t_grid2.addWidget(self.btn_tti_ma, 0, 2); t_grid2.addWidget(self.btn_tti_mv, 0, 3)
+        t_grid2.addWidget(self.btn_tti_dc, 1, 0); t_grid2.addWidget(self.btn_tti_ac, 1, 1); t_grid2.addWidget(self.btn_tti_ohm, 1, 2); t_grid2.addWidget(self.btn_tti_hz, 1, 3)
+        t_grid2.addWidget(self.btn_tti_diode, 2, 0); t_grid2.addWidget(self.btn_tti_cont, 2, 1); t_grid2.addWidget(self.btn_tti_null, 2, 2); t_grid2.addWidget(self.btn_tti_reset, 2, 3)
+
+        self.btn_tti_refresh = QPushButton("Nuskaityti TTi"); self.btn_tti_refresh.setStyleSheet(STYLE_PRIMARY)
+        tti_l.addWidget(self.lbl_tti_val); tti_l.addLayout(t_grid1); tti_l.addLayout(t_grid2); tti_l.addWidget(self.btn_tti_refresh); tti_l.addStretch()
+        self.left_tabs.addTab(tab_tti, "TTi")
+
+        # [TAB] Escort 3136A
+        tab_esc = QWidget(); esc_l = QVBoxLayout(tab_esc); esc_l.setContentsMargins(5, 5, 5, 5)
+        self.lbl_esc_val = QLabel("---"); self.lbl_esc_val.setStyleSheet(STYLE_LCD_DC)
+        self.lbl_esc_val.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        
+        e_grid = QGridLayout(); e_grid.setSpacing(2)
+        self.btn_esc_vdc = QPushButton("V DC"); self.btn_esc_vac = QPushButton("V AC"); self.btn_esc_ohm = QPushButton("Ω")
+        self.btn_esc_adc = QPushButton("A DC"); self.btn_esc_aac = QPushButton("A AC"); self.btn_esc_diode = QPushButton("Diode")
+        self.btn_esc_hz = QPushButton("Hz")
+        for btn in [self.btn_esc_vdc, self.btn_esc_vac, self.btn_esc_ohm, self.btn_esc_adc, self.btn_esc_aac, self.btn_esc_diode, self.btn_esc_hz]:
+            btn.setStyleSheet(STYLE_NORMAL)
+        e_grid.addWidget(self.btn_esc_vdc, 0, 0); e_grid.addWidget(self.btn_esc_vac, 0, 1); e_grid.addWidget(self.btn_esc_ohm, 0, 2)
+        e_grid.addWidget(self.btn_esc_adc, 1, 0); e_grid.addWidget(self.btn_esc_aac, 1, 1); e_grid.addWidget(self.btn_esc_diode, 1, 2)
+        e_grid.addWidget(self.btn_esc_hz, 2, 0)
+        
+        self.btn_esc_read_all = QPushButton("Nuskaityti Escort"); self.btn_esc_read_all.setStyleSheet(STYLE_PRIMARY)
+        esc_l.addWidget(self.lbl_esc_val); esc_l.addLayout(e_grid); esc_l.addWidget(self.btn_esc_read_all); esc_l.addStretch()
+        self.left_tabs.addTab(tab_esc, "Escort")
+
+        # [TAB] Bode
+        tab_bode = QWidget(); bode_l = QGridLayout(tab_bode); bode_l.setContentsMargins(5, 5, 5, 5); bode_l.setSpacing(5)
+        self.bode_start_f = QSpinBox(); self.bode_start_f.setRange(1, 1000000); self.bode_start_f.setValue(100)
+        self.bode_stop_f = QSpinBox(); self.bode_stop_f.setRange(10, 10000000); self.bode_stop_f.setValue(100000)
+        self.bode_points = QSpinBox(); self.bode_points.setRange(5, 500); self.bode_points.setValue(50)
+        self.bode_amp = QDoubleSpinBox(); self.bode_amp.setRange(0.1, 10); self.bode_amp.setValue(2.0)
+        self.bode_device = QComboBox(); self.bode_device.addItems(["Rigol MSO", "TTi 1604", "Escort 3136A"])
         self.bode_gen_ch = QComboBox(); self.bode_gen_ch.addItems(["CH1", "CH2"])
-        self.bode_device = QComboBox(); self.bode_device.addItems(["Rigol MSO (Vpp)", "TTi 1604 (V)", "Escort 3136A (V)"])
         self.bode_osc_ch = QComboBox(); self.bode_osc_ch.addItems(["CH1", "CH2", "CH3", "CH4"])
-        self.lbl_bode_osc_ch = QLabel("Osc. Kanalas:")
-
-        self.btn_start_bode = QPushButton("Pradėti skenavimą"); self.btn_stop_bode = QPushButton("Stabdyti")
-        self.btn_start_bode.setStyleSheet(style_green); self.btn_stop_bode.setStyleSheet(style_red)
         
-        bode_layout.addRow("Pradinis f:", self.bode_start_f)
-        bode_layout.addRow("Galinis f:", self.bode_stop_f)
-        bode_layout.addRow("Taškų sk.:", self.bode_points)
-        bode_layout.addRow("Vin Amp:", self.bode_amp)
-        bode_layout.addRow("Gen. Kanalas:", self.bode_gen_ch)
-        bode_layout.addRow("Matuoklis:", self.bode_device)
-        bode_layout.addRow(self.lbl_bode_osc_ch, self.bode_osc_ch)
-        bode_layout.addRow(self.btn_start_bode, self.btn_stop_bode)
+        bode_l.addWidget(QLabel("Pradinis (Hz):"), 0, 0); bode_l.addWidget(self.bode_start_f, 0, 1)
+        bode_l.addWidget(QLabel("Galinis (Hz):"), 1, 0); bode_l.addWidget(self.bode_stop_f, 1, 1)
+        bode_l.addWidget(QLabel("Taškų sk.:"), 2, 0); bode_l.addWidget(self.bode_points, 2, 1)
+        bode_l.addWidget(QLabel("Amplitudė (V):"), 3, 0); bode_l.addWidget(self.bode_amp, 3, 1)
+        bode_l.addWidget(QLabel("Matuoklis:"), 4, 0); bode_l.addWidget(self.bode_device, 4, 1)
+        bode_l.addWidget(QLabel("Gen. Kanalas:"), 5, 0); bode_l.addWidget(self.bode_gen_ch, 5, 1)
+        self.lbl_bode_osc_ch = QLabel("Osc. Kanalas:")
+        bode_l.addWidget(self.lbl_bode_osc_ch, 6, 0); bode_l.addWidget(self.bode_osc_ch, 6, 1)
+
+        self.btn_start_bode = QPushButton("Pradėti Bode"); self.btn_start_bode.setStyleSheet(STYLE_SUCCESS)
+        self.btn_stop_bode = QPushButton("Stabdyti"); self.btn_stop_bode.setStyleSheet(STYLE_DANGER)
         self.bode_progress = QProgressBar(); self.bode_progress.setValue(0)
-        bode_layout.addRow(self.bode_progress)
-        self.ctrl_tabs.addTab(bode_tab, "Bode")
+        bode_l.addWidget(self.btn_start_bode, 7, 0, 1, 2); bode_l.addWidget(self.btn_stop_bode, 8, 0, 1, 2)
+        bode_l.addWidget(self.bode_progress, 9, 0, 1, 2); bode_l.setRowStretch(10, 1)
+        self.left_tabs.addTab(tab_bode, "Bode")
 
-        # 5. Logger
-        log_tab = QWidget(); log_layout = QFormLayout(log_tab)
+        # [TAB] Logger
+        tab_log = QWidget(); log_l = QGridLayout(tab_log); log_l.setContentsMargins(5, 5, 5, 5); log_l.setSpacing(5)
         self.log_device = QComboBox(); self.log_device.addItems(["TTi 1604", "Escort 3136A"])
-        self.log_mode = QComboBox(); self.log_mode.addItems(["Įtampa (V)", "Srovė (A)"])
-        self.log_interval = QDoubleSpinBox(); self.log_interval.setRange(0.5, 3600.0); self.log_interval.setValue(1.0)
-        self.log_duration = QSpinBox(); self.log_duration.setRange(0, 10000); self.log_duration.setValue(0)
-        self.btn_start_log = QPushButton("Pradėti registravimą"); self.btn_stop_log = QPushButton("Stabdyti")
-        self.btn_start_log.setStyleSheet(style_green); self.btn_stop_log.setStyleSheet(style_red)
-        self.lbl_log_current = QLabel("Reikšmė: -"); self.lbl_log_current.setStyleSheet("font-weight: bold; color: #FFC107;")
-        log_layout.addRow("Prietaisas:", self.log_device); log_layout.addRow("Matavimas:", self.log_mode)
-        log_layout.addRow("Interv. (s):", self.log_interval); log_layout.addRow("Trukmė (m):", self.log_duration)
-        log_layout.addRow(self.btn_start_log, self.btn_stop_log); log_layout.addRow(self.lbl_log_current)
-        self.ctrl_tabs.addTab(log_tab, "Logger")
+        self.log_mode = QComboBox(); self.log_mode.addItems(["V DC", "V AC", "A DC", "A AC", "mA DC", "mA AC", "OHM", "Hz"])
+        self.log_interval = QSpinBox(); self.log_interval.setRange(100, 60000); self.log_interval.setValue(1000)
+        self.log_duration = QSpinBox(); self.log_duration.setRange(0, 1440); self.log_duration.setValue(0)
+        
+        log_l.addWidget(QLabel("Prietaisas:"), 0, 0); log_l.addWidget(self.log_device, 0, 1)
+        log_l.addWidget(QLabel("Režimas:"), 1, 0); log_l.addWidget(self.log_mode, 1, 1)
+        log_l.addWidget(QLabel("Intervalas (ms):"), 2, 0); log_l.addWidget(self.log_interval, 2, 1)
+        log_l.addWidget(QLabel("Trukmė (min):"), 3, 0); log_l.addWidget(self.log_duration, 3, 1)
 
-        # 6. FFT
-        fft_tab = QWidget(); fft_layout = QVBoxLayout(fft_tab)
-        self.btn_calc_fft = QPushButton("Nuskaityti ir skaičiuoti FFT")
-        self.btn_calc_fft.setStyleSheet(style_purple)
-        self.lbl_fft_peak = QLabel("Pikas: - Hz"); self.lbl_fft_peak.setStyleSheet("font-weight: bold; color: #00BCD4;")
-        fft_layout.addWidget(self.btn_calc_fft); fft_layout.addWidget(self.lbl_fft_peak); fft_layout.addStretch()
-        self.ctrl_tabs.addTab(fft_tab, "FFT")
+        self.lbl_log_current = QLabel("Dabartinė: ---")
+        self.btn_start_log = QPushButton("Pradėti Registravimą"); self.btn_start_log.setStyleSheet(STYLE_SUCCESS)
+        self.btn_stop_log = QPushButton("Stabdyti"); self.btn_stop_log.setStyleSheet(STYLE_DANGER)
+        log_l.addWidget(self.lbl_log_current, 4, 0, 1, 2); log_l.addWidget(self.btn_start_log, 5, 0, 1, 2)
+        log_l.addWidget(self.btn_stop_log, 6, 0, 1, 2); log_l.setRowStretch(7, 1)
+        self.left_tabs.addTab(tab_log, "Logger")
 
-        left_layout.addWidget(self.ctrl_tabs)
+        left_v_layout.addWidget(self.left_tabs)
+        self.splitter.addWidget(left_container)
 
-        self.log_console = QTextEdit(); self.log_console.setReadOnly(True); self.log_console.setMaximumHeight(150)
-        self.log_console.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: Consolas; font-size: 11px;")
-        left_layout.addWidget(QLabel("<b>Žurnalas:</b>")); left_layout.addWidget(self.log_console)
-
-        scroll_area.setWidget(container)
-        self.splitter.addWidget(scroll_area)
-
+        # --- DEŠINĖ: Grafikai ir Žurnalas ---
+        right_container = QWidget(); right_v_layout = QVBoxLayout(right_container)
+        right_v_layout.setContentsMargins(0, 0, 0, 0); right_v_layout.setSpacing(5)
+        
         self.graph_tabs = QTabWidget()
         
-        osc_graph_tab = QWidget(); osc_graph_layout = QVBoxLayout(osc_graph_tab)
-        self.graph_widget = pg.PlotWidget()
+        # Oscilograma
+        tab_g_osc = QWidget(); l_g_osc = QVBoxLayout(tab_g_osc); l_g_osc.setContentsMargins(0, 0, 0, 0)
+        self.graph_widget = pg.PlotWidget(); self.graph_widget.showGrid(x=True, y=True)
         self.graph_widget.setLabel('left', 'Įtampa', units='V'); self.graph_widget.setLabel('bottom', 'Laikas', units='s')
-        self.graph_widget.showGrid(x=True, y=True)
-        stream_ctrl = QHBoxLayout()
-        self.btn_start_stream = QPushButton("Pradėti gyvą rodymą"); self.btn_stop_stream = QPushButton("Stabdyti"); self.btn_export = QPushButton("Eksportuoti CSV")
-        self.btn_start_stream.setStyleSheet(style_green)
-        self.btn_stop_stream.setStyleSheet(style_red)
-        self.btn_export.setStyleSheet(style_indigo)
-        stream_ctrl.addWidget(self.btn_start_stream); stream_ctrl.addWidget(self.btn_stop_stream); stream_ctrl.addWidget(self.btn_export)
-        osc_graph_layout.addWidget(self.graph_widget); osc_graph_layout.addLayout(stream_ctrl)
-
-        bode_graph_tab = QWidget(); bode_graph_layout = QVBoxLayout(bode_graph_tab)
-        self.bode_graph = pg.PlotWidget()
-        self.bode_graph.setLabel('left', 'Stiprinimas', units='dB'); self.bode_graph.setLabel('bottom', 'Dažnis', units='Hz (Log)')
-        self.bode_graph.setLogMode(x=True, y=False); self.bode_graph.showGrid(x=True, y=True)
-        self.btn_export_bode = QPushButton("Eksportuoti Bode CSV"); self.btn_export_bode.setStyleSheet(style_indigo)
-        bode_graph_layout.addWidget(self.bode_graph); bode_graph_layout.addWidget(self.btn_export_bode)
-
-        log_graph_tab = QWidget(); log_graph_layout = QVBoxLayout(log_graph_tab)
-        self.log_graph = pg.PlotWidget()
-        self.log_graph.setLabel('left', 'Reikšmė'); self.log_graph.setLabel('bottom', 'Laikas', units='s'); self.log_graph.showGrid(x=True, y=True)
-        log_graph_layout.addWidget(self.log_graph)
-
-        fft_graph_tab = QWidget(); fft_graph_layout = QVBoxLayout(fft_graph_tab)
-        self.fft_graph = pg.PlotWidget()
-        self.fft_graph.setLabel('left', 'Amplitudė', units='V'); self.fft_graph.setLabel('bottom', 'Dažnis', units='Hz'); self.fft_graph.showGrid(x=True, y=True)
-        fft_graph_layout.addWidget(self.fft_graph)
-
-        self.graph_tabs.addTab(osc_graph_tab, "Gyva Oscilograma")
-        self.graph_tabs.addTab(bode_graph_tab, "Bode Dažninė Charakteristika")
-        self.graph_tabs.addTab(log_graph_tab, "Ilgalaikis Registravimas")
-        self.graph_tabs.addTab(fft_graph_tab, "Spektrinė Analizė (FFT)")
         
-        self.splitter.addWidget(self.graph_tabs)
-        self.splitter.setSizes([450, 950])
+        h_ctrl_osc = QHBoxLayout()
+        self.btn_stream = QPushButton("START Atvaizdavimą")
+        self.btn_stream.setCheckable(True)
+        self.btn_stream.setStyleSheet(STYLE_DANGER)
+        self.btn_calc_fft = QPushButton("Skaičiuoti FFT"); self.btn_calc_fft.setStyleSheet(STYLE_PRIMARY)
+        self.btn_export = QPushButton("Eksportuoti CSV"); self.btn_export.setStyleSheet(STYLE_EXPORT)
+        
+        h_ctrl_osc.addWidget(self.btn_stream)
+        h_ctrl_osc.addWidget(self.btn_calc_fft)
+        h_ctrl_osc.addWidget(self.btn_export)
+        
+        l_g_osc.addWidget(self.graph_widget); l_g_osc.addLayout(h_ctrl_osc)
+        self.graph_tabs.addTab(tab_g_osc, "Oscilograma")
+
+        # Bode
+        tab_g_bode = QWidget(); l_g_bode = QVBoxLayout(tab_g_bode); l_g_bode.setContentsMargins(0, 0, 0, 0)
+        self.bode_graph = pg.PlotWidget(); self.bode_graph.showGrid(x=True, y=True); self.bode_graph.setLogMode(x=True, y=False)
+        self.bode_graph.setLabel('left', 'Stiprinimas', units='dB'); self.bode_graph.setLabel('bottom', 'Dažnis', units='Hz')
+        self.btn_export_bode = QPushButton("Eksportuoti Bode"); self.btn_export_bode.setStyleSheet(STYLE_EXPORT)
+        l_g_bode.addWidget(self.bode_graph); l_g_bode.addWidget(self.btn_export_bode)
+        self.graph_tabs.addTab(tab_g_bode, "Bode Analizė")
+
+        # Logger
+        tab_g_log = QWidget(); l_g_log = QVBoxLayout(tab_g_log); l_g_log.setContentsMargins(0, 0, 0, 0)
+        self.log_graph = pg.PlotWidget(); self.log_graph.showGrid(x=True, y=True)
+        self.log_graph.setLabel('left', 'Reikšmė'); self.log_graph.setLabel('bottom', 'Laikas', units='s')
+        l_g_log.addWidget(self.log_graph)
+        self.graph_tabs.addTab(tab_g_log, "Ilgalaikis Registravimas")
+
+        # FFT
+        tab_g_fft = QWidget(); l_g_fft = QVBoxLayout(tab_g_fft); l_g_fft.setContentsMargins(0, 0, 0, 0)
+        self.fft_graph = pg.PlotWidget(); self.fft_graph.showGrid(x=True, y=True)
+        self.fft_graph.setLabel('left', 'Amplitudė', units='V'); self.fft_graph.setLabel('bottom', 'Dažnis', units='Hz')
+        self.lbl_fft_peak = QLabel("Pikas: ---")
+        self.lbl_fft_peak.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        l_g_fft.addWidget(self.fft_graph); l_g_fft.addWidget(self.lbl_fft_peak)
+        self.graph_tabs.addTab(tab_g_fft, "FFT")
+
+        # Žurnalas
+        self.log_console = QTextEdit()
+        self.log_console.setReadOnly(True)
+        self.log_console.setFixedHeight(120)
+        self.log_console.setStyleSheet("border: 1px solid #3c3c3c; background: #0f0f0f; color: #fff;")
+        self.log_console.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+
+        self.btn_save_log = QPushButton("Išsaugoti Žurnalą")
+        self.btn_save_log.setStyleSheet(STYLE_NORMAL)
+
+        right_v_layout.addWidget(self.graph_tabs)
+        right_v_layout.addWidget(QLabel("Sistemos Žurnalas:"))
+        right_v_layout.addWidget(self.log_console)
+        right_v_layout.addWidget(self.btn_save_log)
+
+        self.splitter.addWidget(right_container)
+        self.splitter.setSizes([450, 1000])
