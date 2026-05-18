@@ -27,9 +27,12 @@ Sistema sukonfigūruota ir ištestuota dirbti su šiais prietaisais:
 ## Greitas paleidimas (Galutiniams vartotojams)
 
 Jei nenorite diegti programavimo aplinkos, galite atsisiųsti paruoštą vykdomąjį failą:
-1. Eikite į šios repozitorijos skyrių **Releases**.
-2. Atsisiųskite naujausią sukompiliuotą `.exe` failą.
-3. Prijunkite prietaisus ir paleiskite programą (papildomas diegimas nereikalingas).
+
+👉 **[Atsisiųsti Automatizuota Matavimų Sistema (v1.0)](https://github.com/3miliokas/automatizuota-matavimu-sistema/releases/download/v1.0/Automatizuota.Matavimu.Sistema.exe)**
+
+1. Atsisiųskite aukščiau esantį `.exe` failą.
+2. Prijunkite prietaisus prie kompiuterio.
+3. Paleiskite atsisiųstą programą (papildomas diegimas nereikalingas).
 4. Valdymo skydelyje paspauskite „Skenuoti VISA ir COM“ ir priskirkite rastus prievadus.
 
 ## Diegimo instrukcija (Kūrėjams)
