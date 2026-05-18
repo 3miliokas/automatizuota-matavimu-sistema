@@ -21,10 +21,18 @@ Sistema sukonfigūruota ir ištestuota dirbti su šiais prietaisais:
 ## Sistemos reikalavimai
 
 * **Operacinė sistema:** Windows 10/11
-* **Python:** 3.10 ar naujesnė versija
 * **VISA tvarkyklės:** rekomenduojama „NI-VISA“ (reikalinga USB-TMC ryšiui užtikrinti)
+* **Python:** 3.10 ar naujesnė versija (reikalinga *tik* norint modifikuoti ar kompiliuoti kodą)
 
-## Diegimo instrukcija
+## Greitas paleidimas (Galutiniams vartotojams)
+
+Jei nenorite diegti programavimo aplinkos, galite atsisiųsti paruoštą vykdomąjį failą:
+1. Eikite į šios repozitorijos skyrių **Releases**.
+2. Atsisiųskite naujausią sukompiliuotą `.exe` failą.
+3. Prijunkite prietaisus ir paleiskite programą (papildomas diegimas nereikalingas).
+4. Valdymo skydelyje paspauskite „Skenuoti VISA ir COM“ ir priskirkite rastus prievadus.
+
+## Diegimo instrukcija (Kūrėjams)
 
 1. Sukurkite virtualią „Python“ aplinką projekto aplanke:
 ```bash
@@ -35,22 +43,25 @@ python -m venv venv
 ```bash
 .\venv\Scripts\Activate.ps1
 ```
-
-(Jei naudojate CMD: `.\venv\Scripts\activate.bat`)
+*(Jei naudojate CMD: `.\venv\Scripts\activate.bat`)*
 
 3. Įdiekite reikiamas bibliotekas:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Naudojimas
+## Naudojimas iš kodo ir Kompiliavimas
 
+**Paleidimas programavimo aplinkoje:**
 1. Prijunkite matavimo prietaisus prie kompiuterio USB ir RS-232 jungtimis.
 2. Paleiskite pagrindinį programos failą:
 ```bash
 python main.py
 ```
 
-3. Valdymo skydelyje paspauskite „Skenuoti VISA ir COM“.
-4. Išskleidžiamuosiuose sąrašuose priskirkite rastus prievadus atitinkamiems prietaisams.
-5. Naudokitės funkciniais skirtukais (Bode, Logger, FFT) norimiems automatizuotiems matavimams atlikti. Visi surinkti duomenys gali būti eksportuojami `.csv` formatu tolimesnei analizei.
+**Kompiliavimas į vykdomąjį (.exe) failą:**
+Norint sugeneruoti savarankišką failą, aktyvioje virtualioje aplinkoje įvykdykite:
+```bash
+pyinstaller --onefile --windowed main.py
+```
+*(Sukompiliuotas failas bus automatiškai patalpintas `dist` kataloge).*
