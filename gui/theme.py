@@ -2,8 +2,14 @@ from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import Qt
 
 def apply_dark_theme(app):
+    """
+    Pritaikoma globali tamsi (Dark) tema visai "PyQt6" aplikacijai.
+    Naudojamas "Fusion" stilius, kuris užtikrina vienodą UI elementų 
+    atvaizdavimą nepriklausomai nuo operacinės sistemos (Windows, macOS, Linux).
+    """
     app.setStyle("Fusion")
     
+    # 1. Paletės (QPalette) perrašymas bazinėms sistemos spalvoms
     dark_palette = QPalette()
     dark_palette.setColor(QPalette.ColorRole.Window, QColor(35, 35, 35))
     dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
@@ -18,6 +24,8 @@ def apply_dark_theme(app):
     dark_palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
     app.setPalette(dark_palette)
 
+    # 2. Globalūs CSS stilių šablonai specifiniams valdikliams
+    # Siekiant inžinerinės (neapvalios) išvaizdos, panaudota border-radius: 0px.
     flat_css = """
         QWidget {
             font-size: 12px;
@@ -81,11 +89,18 @@ def apply_dark_theme(app):
     """
     app.setStyleSheet(flat_css)
 
+"""
+Globalios konstantos mygtukų ir indikatorių stiliams.
+Naudojamos dinaminiam UI atnaujinimui iš valdiklių (controllers).
+"""
+
 STYLE_PRIMARY = "QPushButton { background-color: #2980B9; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #3498DB; }"
 STYLE_SUCCESS = "QPushButton { background-color: #27AE60; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #2ECC71; }"
-STYLE_DANGER = "QPushButton { background-color: #C0392B; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #E74C3C; }"
-STYLE_NORMAL = "QPushButton { background-color: #454545; color: white; padding: 6px; border: 1px solid #555; } QPushButton:hover { background-color: #555; }"
-STYLE_ACTIVE = "QPushButton { background-color: #27AE60; color: white; font-weight: bold; padding: 6px; border: none; }"
-STYLE_EXPORT = "QPushButton { background-color: #8E44AD; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #9B59B6; }"
+STYLE_DANGER  = "QPushButton { background-color: #C0392B; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #E74C3C; }"
+STYLE_NORMAL  = "QPushButton { background-color: #454545; color: white; padding: 6px; border: 1px solid #555; } QPushButton:hover { background-color: #555; }"
+STYLE_ACTIVE  = "QPushButton { background-color: #27AE60; color: white; font-weight: bold; padding: 6px; border: none; }"
+STYLE_EXPORT  = "QPushButton { background-color: #8E44AD; color: white; font-weight: bold; padding: 6px; border: none; } QPushButton:hover { background-color: #9B59B6; }"
+
+""" Skaitmeninių multimetrų (TTi, Escort) imituotų LCD ekranų CSS. """
 STYLE_LCD_DC = "font-size: 24px; font-weight: bold; color: #4CAF50; background: black; padding: 5px; border: 1px solid #333; text-align: center;"
 STYLE_LCD_AC = "font-size: 24px; font-weight: bold; color: #FFA500; background: black; padding: 5px; border: 1px solid #333; text-align: center;"
