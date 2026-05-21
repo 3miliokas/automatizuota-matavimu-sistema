@@ -8,6 +8,7 @@ class GenController:
     Taip pat užtikrina dvikryptę sinchronizaciją – atnaujina programos UI
     pagal fizinius prietaiso nustatymus.
     """
+
     def __init__(self, main, ui, mgr):
         self.main = main
         self.ui = ui
@@ -18,20 +19,59 @@ class GenController:
         self.ui.btn_apply_gen.clicked.connect(self.apply_params)
         self.ui.btn_eqphase.clicked.connect(self.apply_eqphase)
         
+        # Dinaminio UI (Labels ir Units) atnaujinimo signalai
+        self.ui.combo_freq_type.currentIndexChanged.connect(self._update_freq_ui)
+        self.ui.combo_amp_type.currentIndexChanged.connect(self._update_amp_ui)
+        
         # Kanalų aktyvavimo mygtukų būsenų atnaujinimas ir komandų siuntimas
         self.ui.btn_gen_ch1.toggled.connect(lambda s: (self.set_output(s, 1), self.main.update_toggle_button_style(self.ui.btn_gen_ch1, s)))
-        self.ui.btn_gen_ch2.toggled.connect(lambda s: (self.set_output(s, 2), self.main.update_toggle_button_style(self.ui.btn_gen_ch2, s)))
+        self.ui.btn_gen_ch2.toggled.connect(lambda s: (self.set_output(s, 2), self.main.update_toggle_button_style(self.ui.btn_gen_ch2, s)))    
 
     def _on_changed(self):
         """Apdoroja generatoriaus VISA adreso pasikeitimą išskleidžiamajame sąraše."""
         addr = self.ui.combo_gen.currentData()
         if addr: 
             self.mgr.connect_gen(addr)
+            # Tik prisijungus priverstinai suveikia atnaujinimas
+            self.sync_ui(force=True)
         else:
             with self.mgr.lock:
                 if self.mgr.gen: 
                     self.mgr.gen.close()
                     self.mgr.gen = None
+
+    def _update_freq_ui(self):
+        """
+        Dinamiškai pakeičia dažnio/periodo įvesties etiketę bei
+        galimus matavimo vienetus išskleidžiamajame sąraše.
+        """
+        self.ui.freq_unit.blockSignals(True)
+        self.ui.freq_unit.clear()
+        
+        if self.ui.combo_freq_type.currentIndex() == 0:
+            # Pasirinktas "Dažnis (Freq)"
+            self.ui.lbl_freq.setText("Dažnis:")
+            self.ui.freq_unit.addItems(["Hz", "kHz", "MHz"])
+        else:
+            # Pasirinktas "Periodas (Period)"
+            self.ui.lbl_freq.setText("Periodas:")
+            self.ui.freq_unit.addItems(["s", "ms", "us"])
+            
+        self.ui.freq_unit.blockSignals(False)
+
+    def _update_amp_ui(self):
+        """
+        Dinamiškai pakeičia įtampos (Amplitudė/High Level)
+        ir (Poslinkis/Low Level) tekstines etiketes (Labels) lange.
+        """
+        if self.ui.combo_amp_type.currentIndex() == 0:
+            # Pasirinktas "Amplitudė/Poslinkis"
+            self.ui.lbl_amp.setText("Amplitudė (V):")
+            self.ui.lbl_offset.setText("Poslinkis (V):")
+        else:
+            # Pasirinktas "High/Low Level"
+            self.ui.lbl_amp.setText("High Level (V):")
+            self.ui.lbl_offset.setText("Low Level (V):")
 
     def set_output(self, state, channel):
         """Įjungia arba išjungia nurodyto kanalo signalo generavimą išvestyje."""
@@ -72,32 +112,44 @@ class GenController:
         amp_mode = "AMP" if self.ui.combo_amp_type.currentIndex() == 0 else "HLEV"
         ch = 1 if self.ui.gen_ch_select.currentIndex() == 0 else 2
         
-        # Saugus prietaiso resursų užrakinimas prieš siunčiant SCPI komandas
-        with self.mgr.lock:
-            self.mgr.gen.apply_waveform(
-                self.ui.wave_type.currentText(), 
-                f_mode, 
-                freq_val, 
-                amp_mode, 
-                self.ui.amp_in.value(), 
-                self.ui.offset_in.value(), 
-                self.ui.phase_in.value(), 
-                self.ui.duty_in.value(), 
-                self.ui.sym_in.value(), 
-                self.ui.delay_in.value(), 
-                self.ui.stdev_in.value(), 
-                self.ui.mean_in.value(), 
-                ch
-            )
-            
-        self.main.hide_loading()
+        try:
+            # Saugus prietaiso resursų užrakinimas prieš siunčiant SCPI komandas
+            with self.mgr.lock:
+                self.mgr.gen.apply_waveform(
+                    self.ui.wave_type.currentText(), 
+                    f_mode, 
+                    freq_val, 
+                    amp_mode, 
+                    self.ui.amp_in.value(), 
+                    self.ui.offset_in.value(), 
+                    self.ui.phase_in.value(), 
+                    self.ui.duty_in.value(), 
+                    self.ui.sym_in.value(), 
+                    self.ui.delay_in.value(), 
+                    self.ui.stdev_in.value(), 
+                    self.ui.mean_in.value(), 
+                    ch
+                )
+        finally:
+            self.main.hide_loading()
 
-    def sync_ui(self):
+    def sync_ui(self, force=False):
         """
         Dvikryptė sinchronizacija (Polling). 
         Reguliariai apklausia generatoriaus būseną (kanalų aktyvumą, dažnį, amplitudę)
         ir atnaujina GUI elementus, jei parametrai buvo pakeisti tiesiogiai fiziniame prietaise.
         """
+        if not self.mgr.gen: return
+        
+        # GRIEŽTA APSAUGA: Jei vartotojas veda bet kokius skaičius (ar laiko pelę),
+        # mes nesinchronizuojame duomenų, kad nenumuštume įvesties.
+        if not force:
+            inputs = [self.ui.freq_in, self.ui.amp_in, self.ui.offset_in, self.ui.phase_in, 
+                      self.ui.duty_in, self.ui.sym_in, self.ui.delay_in, self.ui.stdev_in, self.ui.mean_in,
+                      self.ui.combo_freq_type, self.ui.combo_amp_type, self.ui.wave_type, self.ui.gen_ch_select]
+            if any(w.hasFocus() for w in inputs):
+                return
+
         if not self.mgr.lock.locked() and self.mgr.gen:
             with self.mgr.lock:
                 # Laikinai išjungiamas žurnalo pildymas (logging), kad polling nešiukšlintų konsolės
@@ -128,29 +180,28 @@ class GenController:
                             # Pašalinami SCPI vienetų simboliai iš atsakymo
                             f_val = float(params["FRQ"].replace('HZ','').replace('V','').replace('S',''))
                             
-                            # Jei vartotojas šiuo metu neveda dažnio (laukelis neturi fokuso), atnaujiname
-                            if not self.ui.freq_in.hasFocus():
-                                self.ui.freq_in.blockSignals(True)
-                                if f_val >= 1e6: 
-                                    self.ui.freq_in.setValue(f_val/1e6)
-                                    self.ui.freq_unit.setCurrentText("MHz")
-                                elif f_val >= 1e3: 
-                                    self.ui.freq_in.setValue(f_val/1e3)
-                                    self.ui.freq_unit.setCurrentText("kHz")
-                                else: 
-                                    self.ui.freq_in.setValue(f_val)
-                                    self.ui.freq_unit.setCurrentText("Hz")
-                                self.ui.freq_in.blockSignals(False)
+                            self.ui.freq_in.blockSignals(True)
+                            self.ui.freq_unit.blockSignals(True)
+                            if f_val >= 1e6: 
+                                self.ui.freq_in.setValue(f_val/1e6)
+                                self.ui.freq_unit.setCurrentText("MHz")
+                            elif f_val >= 1e3: 
+                                self.ui.freq_in.setValue(f_val/1e3)
+                                self.ui.freq_unit.setCurrentText("kHz")
+                            else: 
+                                self.ui.freq_in.setValue(f_val)
+                                self.ui.freq_unit.setCurrentText("Hz")
+                            self.ui.freq_unit.blockSignals(False)
+                            self.ui.freq_in.blockSignals(False)
                         except: pass
                         
                     # --- Amplitudės sinchronizacija ---
                     if params and "AMP" in params:
                         try:
                             a_val = float(params["AMP"].replace('V',''))
-                            if not self.ui.amp_in.hasFocus():
-                                self.ui.amp_in.blockSignals(True)
-                                self.ui.amp_in.setValue(a_val)
-                                self.ui.amp_in.blockSignals(False)
+                            self.ui.amp_in.blockSignals(True)
+                            self.ui.amp_in.setValue(a_val)
+                            self.ui.amp_in.blockSignals(False)
                         except: pass
                 except: pass
                 finally: 

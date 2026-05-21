@@ -1,24 +1,33 @@
-from PyQt6.QtCore import QTimer
+import threading
+from PyQt6.QtCore import pyqtSignal, QObject
 from gui.theme import STYLE_LCD_AC, STYLE_LCD_DC
+
+class TtiSignals(QObject):
+    # Signalas, skirtas saugiai perduoti duomenis iš fono gijos į GUI.
+    data_ready = pyqtSignal(object, str, str)
 
 class TtiController:
     """
     TTi 1604 stalinio multimetro valdymo valdiklis.
-    Apdoroja prietaiso mygtukų paspaudimus GUI sąsajoje, formatuoja išsiunčiamas
-    komandas, realizuoja programinį duomenų kalibravimą (NULL/Zero funkciją) 
-    bei atnaujina virtualų LCD ekraną.
+    Apdoroja mygtukų paspaudimus, siunčia RS-232 komandas fone,
+    atnaujina ekranėlį (Label) bei realizuoja programinę "NULL" (poslinkio) funkciją.
     """
     def __init__(self, main_win, ui, mgr):
         self.main = main_win
         self.ui = ui
         self.mgr = mgr
         
+        # Programinis nulio nustatymas (offset). 
+        # Kadangi prietaisas per RS-232 to natūraliai nepalaiko, tai atliekama programiškai.
         self.software_offset = 0.0
         self.last_val = None
-
+        
+        self.signals = TtiSignals()
+        self.signals.data_ready.connect(self._update_display)
+        
         self.ui.combo_tti.currentIndexChanged.connect(self._on_changed)
 
-        # Standartinių prietaiso skydelio mygtukų susiejimas per lambda funkcijas
+        # Standartinių komandų susiejimas
         self.ui.btn_tti_operate.clicked.connect(lambda: self.send_cmd("OPERATE"))
         self.ui.btn_tti_up.clicked.connect(lambda: self.send_cmd("UP"))
         self.ui.btn_tti_down.clicked.connect(lambda: self.send_cmd("DOWN"))
@@ -30,24 +39,20 @@ class TtiController:
         self.ui.btn_tti_dc.clicked.connect(lambda: self.send_cmd("DC"))
         self.ui.btn_tti_ac.clicked.connect(lambda: self.send_cmd("AC"))
         self.ui.btn_tti_ohm.clicked.connect(lambda: self.send_cmd("OHM"))
-        self.ui.btn_tti_hz.clicked.connect(lambda: self.send_cmd("FREQ"))
         
-        # Specifinių matavimų (kuriems reikia SHIFT komandos) ir pagalbiniai mygtukai
-        self.ui.btn_tti_diode.clicked.connect(self.send_diode)
-        self.ui.btn_tti_cont.clicked.connect(self.send_cont)
-        self.ui.btn_tti_reset.clicked.connect(self.send_reset)
+        # Specifinių mygtukų konfigūravimas pagal realų prietaiso atsaką
+        # Pvz., Dažniui ir Grandinės vientisumui reikia spausti SHIFT + V arba SHIFT + OHM
+        self.ui.btn_tti_diode.clicked.connect(lambda: self.send_shift_macro("V", "Frequency (Hz)"))
+        self.ui.btn_tti_hz.clicked.connect(lambda: self.send_cmd("FREQ")) # Remiantis originaliu TTi kodu (kartais DIODE žymimas kaip FREQ)
+        self.ui.btn_tti_cont.clicked.connect(lambda: self.send_shift_macro("OHM", "Continuity"))
+
+        self.ui.btn_tti_reset.clicked.connect(lambda: self.send_cmd("RESET"))
         self.ui.btn_tti_refresh.clicked.connect(self.refresh)
         self.ui.btn_tti_null.toggled.connect(self.toggle_null)
 
     def _on_changed(self):
-        """
-        Apdoroja COM prievado pasikeitimą išskleidžiamajame sąraše.
-        Integruota apsauga nuo prievadų konfliktų: jei pasirenkamas prievadas,
-        kurį jau naudoja Escort multimetras, Escort ryšys automatiškai nutraukiamas.
-        """
+        """Užkerta kelią prievado dubliavimuisi tarp Escort ir TTi įrenginių."""
         port = self.ui.combo_tti.currentData()
-        
-        # Patikrinama, ar prievadas jau nėra užimtas kito multimetro (Escort)
         if port and port == self.ui.combo_escort.currentData():
             self.ui.combo_escort.blockSignals(True)
             self.ui.combo_escort.setCurrentIndex(0)
@@ -56,7 +61,6 @@ class TtiController:
                 if self.mgr.esc: 
                     self.mgr.esc.close()
                     self.mgr.esc = None
-                
         if port: 
             self.mgr.connect_tti(port)
         else:
@@ -66,10 +70,7 @@ class TtiController:
                     self.mgr.tti = None
 
     def set_buttons_state(self, state):
-        """
-        Blokuoja arba atblokuoja visus valdymo mygtukus.
-        Naudojama komandų siuntimo metu (apsaugai nuo vartotojo įvesčių kolizijos).
-        """
+        """Blokuoja mygtukus komandos vykdymo metu, kad nebūtų persidengimų."""
         for btn in [self.ui.btn_tti_operate, self.ui.btn_tti_up, self.ui.btn_tti_down, self.ui.btn_tti_auto,
                     self.ui.btn_tti_v, self.ui.btn_tti_a, self.ui.btn_tti_ma, self.ui.btn_tti_mv,
                     self.ui.btn_tti_dc, self.ui.btn_tti_ac, self.ui.btn_tti_ohm, self.ui.btn_tti_hz,
@@ -78,121 +79,103 @@ class TtiController:
             btn.setEnabled(state)
 
     def send_cmd(self, cmd):
-        """Asinchroniškai išsiunčia standartinę vieno mygtuko paspaudimo komandą į TTi."""
-        if not self.mgr.tti: return self.main.log_msg("Klaida: TTi 1604 neprijungtas.")
+        """Inicijuoja standartinės komandos siuntimą per foninę giją."""
+        if not self.mgr.tti: return
         self.set_buttons_state(False)
-        self.main.show_loading(f"Siunčiama komanda '{cmd}'...")
-        QTimer.singleShot(100, lambda: self._perform_cmd(cmd))
+        self.main.show_loading(f"Siunčiama: '{cmd}'...")
+        threading.Thread(target=self._thread_cmd, args=(cmd,), daemon=True).start()
 
-    def _perform_cmd(self, cmd):
-        """Fiziškai išsiunčia komandą užrakintoje magistralėje ir inicijuoja ekrano atnaujinimą."""
-        with self.mgr.lock: 
-            self.mgr.tti.send_command(cmd)
-        self.main.hide_loading()
-        QTimer.singleShot(100, self.refresh)
+    def _thread_cmd(self, cmd):
+        """Siunčia komandą fone su apsauga nuo UI pakibimo."""
+        val, unit, mode = None, "", ""
+        try:
+            with self.mgr.lock:
+                self.mgr.tti.send_command(cmd)
+                val, unit, mode = self.mgr.tti.get_reading()
+        finally:
+            self.signals.data_ready.emit(val, unit, mode)
+
+    def send_shift_macro(self, cmd, desc):
+        """Inicijuoja dviejų mygtukų kombinacijos (pvz., SHIFT + V) siuntimą."""
+        if not self.mgr.tti: return
+        self.set_buttons_state(False)
+        self.main.show_loading(f"Siunčiama: SHIFT + {cmd}...")
+        threading.Thread(target=self._thread_shift, args=(cmd,), daemon=True).start()
+
+    def _thread_shift(self, cmd):
+        """Siunčia komandų kombinaciją fone su apsauga."""
+        val, unit, mode = None, "", ""
+        try:
+            with self.mgr.lock:
+                self.mgr.tti.send_command("SHIFT")
+                self.mgr.tti.send_command(cmd)
+                val, unit, mode = self.mgr.tti.get_reading()
+        finally:
+            self.signals.data_ready.emit(val, unit, mode)
 
     def refresh(self):
-        """Inicijuoja momentinę duomenų akviziciją iš prietaiso."""
+        """Momentinis reikšmės nuskaitymas (Refresh)."""
         if not self.mgr.tti: return
         self.set_buttons_state(False)
         self.main.show_loading("Nuskaitoma iš TTi 1604...")
-        QTimer.singleShot(100, self._perform_refresh)
+        threading.Thread(target=self._thread_refresh, daemon=True).start()
 
-    def _perform_refresh(self):
+    def _thread_refresh(self):
+        """Nuskaito duomenis fone be komandos keitimo."""
+        val, unit, mode = None, "", ""
+        try:
+            with self.mgr.lock:
+                val, unit, mode = self.mgr.tti.get_reading()
+        finally:
+            self.signals.data_ready.emit(val, unit, mode)
+
+    def _update_display(self, val, unit, mode):
         """
-        Nuskaito iškoduotus binarinius duomenis, pritaiko programinį
-        matavimo poslinkį (jei aktyvus) ir atnaujina virtualų LCD ekraną.
+        Gautos reikšmės apdorojimas (GUI gijoje). 
+        Čia pritaikomas ir programinis Null poslinkis (Offset).
         """
-        with self.mgr.lock:
-            val, unit, mode = self.mgr.tti.get_reading()
-            self.last_val = val
-            
-            if val is not None:
-                if val == float('inf'):
-                    txt = "OFL" # Overload indikacija
-                else:
-                    # Programinis kalibravimas (NULL) - iš reikšmės atimamas užfiksuotas poslinkis
-                    adj_val = val - self.software_offset
-                    txt = f"{adj_val:.4f}"
-                    
-                self.ui.lbl_tti_val.setText(f"{txt} {unit} {mode}".strip())
-                # Stilius: kintamoji srovė oranžine, nuolatinė žalia spalva
-                self.ui.lbl_tti_val.setStyleSheet(STYLE_LCD_AC if "AC" in mode else STYLE_LCD_DC)
+        self.last_val = val
+        if val is not None:
+            if val == float('inf'): 
+                txt = "OFL" # Overload (viršytas limitas)
             else:
-                self.ui.lbl_tti_val.setText("KLAIDA")
+                # Pritaikome apskaičiuotą poslinkį
+                adj_val = val - self.software_offset
+                txt = f"{adj_val:.4f}"
                 
+            self.ui.lbl_tti_val.setText(f"{txt} {unit} {mode}".strip())
+            # AC signalams pritaikomas kitoks vizualinis LED fono stilius
+            self.ui.lbl_tti_val.setStyleSheet(STYLE_LCD_AC if "AC" in mode else STYLE_LCD_DC)
+        else:
+            self.ui.lbl_tti_val.setText("KLAIDA")
+            
+        # Privalomai išjungiama krovimo lentelė ir aktyvuojami mygtukai
         self.main.hide_loading()
         self.set_buttons_state(True)
 
     def toggle_null(self, state):
         """
-        Valdo programinio kalibravimo (NULL / Relative) funkciją.
-        Kai aktyvuota, paskutinis matavimas išsaugomas kaip etaloninis nulis ir
-        nuolat atimamas iš tolesnių gautų duomenų.
+        Įjungia/Išjungia programinį matavimo nulio nustatymą.
+        Kitas matavimas bus skaičiuojamas nuo šios reikšmės.
         """
         if state:
             if self.last_val is not None and self.last_val != float('inf'):
+                # Fiksuojame momentinę reikšmę kaip naują atskaitos tašką
                 self.software_offset = self.last_val
                 self.main.update_toggle_button_style(self.ui.btn_tti_null, True)
             else:
+                # Jei reikšmė nevalidi, atšaukiame paspaudimą
                 self.ui.btn_tti_null.blockSignals(True)
                 self.ui.btn_tti_null.setChecked(False)
                 self.ui.btn_tti_null.blockSignals(False)
         else:
+            # Išjungiame poslinkį
             self.software_offset = 0.0
             self.main.update_toggle_button_style(self.ui.btn_tti_null, False)
             
-        # Dinamiškai perskaičiuojamas jau ekrane rodomas rodmuo pritaikius arba nuėmus filtrą
+        # Iškart perskaičiuojame atvaizduojamą tekstą su nauju poslinkiu
         if self.last_val is not None and self.last_val != float('inf'):
             adj_val = self.last_val - self.software_offset
             parts = self.ui.lbl_tti_val.text().split(" ", 1)
-            if len(parts) > 1:
+            if len(parts) > 1: 
                 self.ui.lbl_tti_val.setText(f"{adj_val:.4f} {parts[1]}")
-
-    def send_diode(self):
-        """Aktyvuoja diodų testavimą (fiziniame prietaise reikalauja SHIFT + V komandų sekos)."""
-        if not self.mgr.tti: return
-        self.set_buttons_state(False)
-        self.main.show_loading("Aktyvuojamas Diode Test...")
-        QTimer.singleShot(100, lambda: (
-            self.mgr.lock.acquire(), 
-            self.mgr.tti.send_command("SHIFT"), 
-            self.mgr.tti.send_command("V"), 
-            self.mgr.lock.release(), 
-            self.main.hide_loading(), 
-            QTimer.singleShot(100, self.refresh)
-        ))
-
-    def send_cont(self):
-        """Aktyvuoja grandinės vientisumo testavimą (SHIFT + OHM)."""
-        if not self.mgr.tti: return
-        self.set_buttons_state(False)
-        self.main.show_loading("Aktyvuojamas Continuity Test...")
-        QTimer.singleShot(100, lambda: (
-            self.mgr.lock.acquire(), 
-            self.mgr.tti.send_command("SHIFT"), 
-            self.mgr.tti.send_command("OHM"), 
-            self.mgr.lock.release(), 
-            self.main.hide_loading(), 
-            QTimer.singleShot(100, self.refresh)
-        ))
-
-    def send_reset(self):
-        """
-        Išsiunčia komandų seką, grąžinančią prietaisą į pradinę, saugią būseną:
-        Nuolatinės įtampos matavimas automatinio mastelio (Auto-range) režimu.
-        Taip pat atšaukia programinį NULL kalibravimą.
-        """
-        if not self.mgr.tti: return
-        self.set_buttons_state(False)
-        self.main.show_loading("RESET...")
-        QTimer.singleShot(100, lambda: (
-            self.mgr.lock.acquire(), 
-            self.mgr.tti.send_command("V"), 
-            self.mgr.tti.send_command("DC"), 
-            self.mgr.tti.send_command("AUTO"), 
-            self.mgr.lock.release(), 
-            self.ui.btn_tti_null.setChecked(False), 
-            self.main.hide_loading(), 
-            QTimer.singleShot(100, self.refresh)
-        ))

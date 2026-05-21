@@ -1,5 +1,6 @@
 import pyvisa
 import re
+import time
 
 class SiglentSDG:
     """
@@ -23,15 +24,22 @@ class SiglentSDG:
         except: pass
 
     def write(self, cmd):
-        """Išsiunčia komandą į prietaisą be atsakymo laukimo."""
+        """
+        Išsiunčia komandą į prietaisą be atsakymo laukimo.
+        Pridėtas apsauginis 100ms laukimas (delay) po kiekvienos komandos,
+        siekiant užkirsti kelią DDS buferio perpildymui keičiant dažnius 
+        (pvz., Bode analizės metu ar greitai spaudant GUI).
+        """
         if self.logger: self.logger(f"SDG TX: {cmd}")
         self.inst.write(cmd)
+        time.sleep(0.1)
 
     def query(self, cmd):
         """Išsiunčia užklausą ir laukia tekstinio atsakymo iš prietaiso."""
         if self.logger: self.logger(f"SDG TX: {cmd}")
         resp = self.inst.query(cmd).strip()
         if self.logger: self.logger(f"SDG RX: {resp}")
+        time.sleep(0.1)
         return resp
 
     def get_output_state(self, channel=1):

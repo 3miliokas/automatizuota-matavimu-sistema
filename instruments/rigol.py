@@ -25,21 +25,26 @@ class RigolMSO:
         except: pass
 
     def write(self, cmd):
-        """Išsiunčia SCPI komandą be atsakymo laukimo."""
         if self.logger: self.logger(f"MSO TX: {cmd}")
-        self.inst.write(cmd)
+        try:
+            self.inst.write(cmd)
+            import time
+            time.sleep(0.05) # Leidžiame USB buferiui išsivalyti
+        except Exception as e:
+            if self.logger: self.logger(f"MSO Write Klaida ({cmd}): {e}")
 
     def query(self, cmd):
-        """Išsiunčia SCPI užklausą ir grąžina tekstinį prietaiso atsakymą."""
-        if self.logger: self.logger(f"MSO TX: {cmd}")
-        resp = self.inst.query(cmd).strip()
-        
-        # Filtruojamas žurnalo (logger) pildymas.
-        # Binarinių duomenų užklausos ignoruojamos, kad neužterštų konsolės neatpažįstamais simboliais.
         if "WAV:DATA?" not in cmd and "WAV:PRE?" not in cmd and "DISP:DATA?" not in cmd:
-            if self.logger: self.logger(f"MSO RX: {resp}")
-        return resp
-
+            if self.logger: self.logger(f"MSO TX: {cmd}")
+        try:
+            resp = self.inst.query(cmd).strip()
+            if "WAV:DATA?" not in cmd and "WAV:PRE?" not in cmd and "DISP:DATA?" not in cmd:
+                if self.logger: self.logger(f"MSO RX: {resp}")
+            return resp
+        except Exception as e:
+            if self.logger: self.logger(f"MSO Query Klaida ({cmd}): {e}")
+            return ""
+        
     def set_channel_display(self, state, channel=1):
         """Įjungia arba išjungia fizinį oscilografo kanalo atvaizdavimą ekrane."""
         s = "ON" if state else "OFF"
@@ -77,7 +82,7 @@ class RigolMSO:
         programa neužšaltų 5 sekundėms.
         """
         old_timeout = self.inst.timeout
-        self.inst.timeout = 500 
+        self.inst.timeout = 2000 # Padidinta į 2000 ms, kad spėtų suskaičiuoti po ašies keitimo
         try:
             val = float(self.query(f":MEASure:ITEM? {type},CHANnel{channel}"))
             self.inst.timeout = old_timeout

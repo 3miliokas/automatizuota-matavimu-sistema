@@ -5,102 +5,103 @@ import time
 class Escort3136A:
     """
     Aparatūrinė tvarkyklė (Driver), skirta valdyti Escort 3136A stalinį multimetrą.
-    Komunikacija vykdoma per RS-232 (arba USB-to-Serial virtualų COM) prievadą.
+    Protokolas paremtas mm3136A.sci specifikacija.
     """
     def __init__(self, port, logger=None):
         self.logger = logger
         self.port = port
         
-        # Inicijuojamas nuoseklusis prievadas pagal gamintojo specifikacijas:
-        # 9600 baud, 8 duomenų bitai, be pariteto, 1 stop bitas, be srauto valdymo.
         self.ser = serial.Serial(
-            port=self.port,
-            baudrate=9600,
-            bytesize=8,
-            parity='N',
-            stopbits=1,
-            timeout=1.0,
-            rtscts=False,
-            dsrdtr=False,
-            xonxoff=False
+            port=self.port, baudrate=9600, bytesize=8,
+            parity='N', stopbits=1, timeout=0.5, # Sumažintas bazinis timeout, nes skaitysime dinamiškai
+            rtscts=False, dsrdtr=False, xonxoff=False
         )
         time.sleep(0.5)
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
         
-        # Patobulintas Regex (reguliariųjų išraiškų) šablonas, skirtas patikimai atpažinti 
-        # tiek standartinius slankiojo kablelio skaičius, tiek mokslinį formatą (pvz., -1.23e-4).
+        # Pažadinimas ir buferio išvalymas (prietaisui reikia \r\n)
+        self.ser.write(b"\r\n")
+        time.sleep(0.1)
+        self.ser.read_all()
+        
+        # Šablonas skaičiaus ištraukimui (įskaitant mokslinį formatą)
         self.number_pattern = re.compile(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?')
+        if self.logger: self.logger(f"Escort 3136A [{self.port}]: Ryšys inicializuotas.")
 
     def close(self):
-        """Saugiai uždaro nuosekliojo prievado ryšį."""
-        if self.ser.is_open:
+        if self.ser and self.ser.is_open:
+            # GTL (Go To Local) atiduoda valdymą prietaiso fiziniams mygtukams
+            self.ser.write(b"GTL\r\n") 
+            time.sleep(0.1)
             self.ser.close()
 
     def query(self, cmd):
-        """
-        Išsiunčia komandą ir efektyviai nuskaito atsakymą.
-        Optimizacija: Escort prietaisas kiekvieno atsakymo pabaigoje grąžina '>' simbolį.
-        Naudojant 'read_until(b'>')', išvengiama laukimo iki timeout pabaigos,
-        todėl ryšys tampa žymiai greitesnis.
-        """
+        """Išsiunčia komandą ir dinamiškai nuskaito atsakymą."""
+        if not self.ser or not self.ser.is_open: return []
         if self.logger: self.logger(f"ESC TX: {cmd}")
+        
         self.ser.reset_input_buffer()
-        self.ser.write((cmd + "\r").encode('ascii'))
+        self.ser.write((cmd + "\r\n").encode('ascii'))
         self.ser.flush()
         
-        # Skaitoma tiksliai iki užklausos pabaigos indikatoriaus
-        raw_data = self.ser.read_until(b'>')
+        # Dinaminis skaitymas (neblokuojantis ir saugus)
+        raw_data = b""
+        start_time = time.time()
+        while time.time() - start_time < 1.0: # Maksimalus 1s timeout
+            if self.ser.in_waiting:
+                time.sleep(0.05) # Leidžiame prietaisui užbaigti siųsti eilutę
+                raw_data += self.ser.read_all()
+                # Escort atsakymai baigiasi nauja eilute arba '>' indikatoriumi
+                if b'\n' in raw_data or b'>' in raw_data:
+                    break
+            time.sleep(0.01)
+            
         text = raw_data.decode('ascii', errors='ignore')
-        
-        # Atsakymas išvalomas nuo tuščių eilučių ir grąžinimo (CR) simbolių
         lines = [line.strip() for line in text.replace('\r', '\n').split('\n') if line.strip()]
         return lines
 
     def send_command(self, cmd):
-        """Išsiunčia komandą, bet ignoruoja atsakymą (naudojama režimų perjungimui)."""
+        """Siunčia konfigūracinę komandą (pvz., režimo keitimą)."""
         self.query(cmd)
 
     def read_value(self):
-        """Pagalbinė funkcija, grąžinanti tik skaliarinę matavimo reikšmę (be vienetų)."""
+        """Grąžina tik skaitinę reikšmę (naudojama Logger foninėje gijoje)."""
         val, _ = self.read_measurement()
         return val
 
     def read_measurement(self):
-        """
-        Atlieka pilną prietaiso būsenos ir duomenų nuskaitymą dviem etapais:
-        1. Nuskaito matavimo reikšmę.
-        2. Nuskaito aktyvų matavimo režimą ir priskiria matavimo vienetus.
-        """
+        """Atlieka pilną prietaiso būsenos ir duomenų nuskaitymą."""
         val = None
         unit = ""
         
-        # --- 1. Matavimo reikšmės nuskaitymas (R1 komanda) ---
+        # 1. Matavimo reikšmės nuskaitymas (R1)
         lines_r1 = self.query("R1")
-        for line in lines_r1:
-            if line == ">" or line == "R1": continue
-            # Taikomas Regex šablonas skaičiaus ištraukimui iš tekstinės eilutės
-            match = self.number_pattern.search(line)
+        if lines_r1:
+            match = self.number_pattern.search(lines_r1[0])
             if match:
                 try:
                     val = float(match.group())
-                    break
                 except ValueError:
                     pass
                     
-        # --- 2. Matavimo režimo ir vienetų nuskaitymas (U1 komanda) ---
+        # 2. Režimo iškodavimas per R0 komandą
         if val is not None:
-            lines_u1 = self.query("U1")
-            for line in lines_u1:
-                if line == ">" or line == "U1": continue
-                # Pirmasis simbolis nurodo aktyvų režimą pagal gamintojo protokolą
-                if len(line) >= 1 and line[0].upper() in "0123456789AB":
-                    m_char = line[0].upper()
-                    mode_map = {
-                        '0': "V DC", '1': "V AC", '2': "Ω", '3': "Ω",
-                        '4': "A DC", '5': "A AC", '6': "V", '7': "Hz"
-                    }
-                    unit = mode_map.get(m_char, "")
-                    break
+            lines_r0 = self.query("R0")
+            # Apsauga nuo trumpo (nepilno) atsakymo
+            if lines_r0 and len(lines_r0[0]) >= 8:
+                f_char = lines_r0[0][7].upper() # 8-tas simbolis nurodo režimą pagal Scilab kodą
+                
+                # Režimų atvaizdavimas pagal Scilab / Escort 3136A protokolą
+                mode_map = {
+                    '0': "V DC", '1': "V AC", '8': "V AC+DC",
+                    '4': "A DC", '5': "A AC", '9': "A AC+DC",
+                    '2': "Ω", 'A': "Continuity", '6': "Diode",
+                    '7': "Hz", 'B': "dBm"
+                }
+                unit = mode_map.get(f_char, "")
 
+        if self.logger and val is not None: 
+            self.logger(f"ESC RX: {val} {unit}")
+            
         return val, unit

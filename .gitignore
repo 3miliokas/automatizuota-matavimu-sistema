@@ -4,4 +4,4 @@ __pycache__/
 build/
 dist/
 *.spec
-test.py
+temp_bode_autosave.csv

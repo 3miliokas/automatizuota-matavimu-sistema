@@ -5,8 +5,8 @@ Tai Python (PyQt6) pagrindu sukurta programinė įranga, skirta laboratorinių m
 ## Palaikoma aparatūra
 
 Sistema sukonfigūruota ir ištestuota dirbti su šiais prietaisais:
-* **Oscilografas:** Rigol MSO1074Z / DS serija (USB/LAN-TMC sąsaja)
-* **Signalų generatorius:** Siglent SDG serija (USB/LAN-TMC sąsaja)
+* **Oscilografas:** Rigol MSO1074Z (USB/LAN-TMC sąsaja)
+* **Signalų generatorius:** Siglent SDG1025  (USB/LAN-TMC sąsaja)
 * **Skaitmeninis multimetras 1:** TTi 1604 (RS-232 sąsaja per virtualų COM prievadą)
 * **Skaitmeninis multimetras 2:** Escort 3136A (RS-232 sąsaja per virtualų COM prievadą)
 
@@ -24,18 +24,18 @@ Sistema sukonfigūruota ir ištestuota dirbti su šiais prietaisais:
 * **VISA tvarkyklės:** rekomenduojama „NI-VISA“ (reikalinga USB-TMC ryšiui užtikrinti)
 * **Python:** 3.10 ar naujesnė versija (reikalinga *tik* norint modifikuoti ar kompiliuoti kodą)
 
-## Greitas paleidimas (Galutiniams vartotojams)
+## Greitas parsisiuntimas
 
-Jei nenorite diegti programavimo aplinkos, galite atsisiųsti paruoštą vykdomąjį failą:
+Jei nenorite diegti programavimo aplinkos, galite atsisiųsti sukompiliuotą programą čia:
 
-👉 **[Atsisiųsti Automatizuota Matavimų Sistema (v1.0)](https://github.com/3miliokas/automatizuota-matavimu-sistema/releases/download/v1.0/Automatizuota.Matavimu.Sistema.exe)**
+👉 **[Atsisiųsti Automatizuota Matavimų Sistema](https://github.com/3miliokas/automatizuota-matavimu-sistema/releases/download/v1.0/Automatizuota.Matavimu.Sistema.exe)**
 
 1. Atsisiųskite aukščiau esantį `.exe` failą.
 2. Prijunkite prietaisus prie kompiuterio.
 3. Paleiskite atsisiųstą programą (papildomas diegimas nereikalingas).
 4. Valdymo skydelyje paspauskite „Skenuoti VISA ir COM“ ir priskirkite rastus prievadus.
 
-## Diegimo instrukcija (Kūrėjams)
+## Sukompiliavimo instrukcija 
 
 1. Sukurkite virtualią „Python“ aplinką projekto aplanke:
 ```bash
