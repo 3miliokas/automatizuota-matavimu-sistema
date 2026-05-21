@@ -28,7 +28,7 @@ Sistema sukonfigūruota ir ištestuota dirbti su šiais prietaisais:
 
 Jei nenorite diegti programavimo aplinkos, galite atsisiųsti sukompiliuotą programą čia:
 
-👉 **[Atsisiųsti Automatizuota Matavimų Sistema](https://github.com/3miliokas/automatizuota-matavimu-sistema/releases/download/v1.0/Automatizuota.Matavimu.Sistema.exe)**
+👉 **[Atsisiųsti Automatizuota Matavimų Sistema](https://github.com/3miliokas/automatizuota-matavimu-sistema/releases/download/v1.1/Automatizuota.Matavimu.Sistema.v1.1.exe)**
 
 1. Atsisiųskite aukščiau esantį `.exe` failą.
 2. Prijunkite prietaisus prie kompiuterio.
